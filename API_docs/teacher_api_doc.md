@@ -489,7 +489,7 @@ Content-Type: application/json
 
 ```json
 {
-  "name": "自然语言处理"
+  "name": ["自然语言处理", "计算机视觉", "机器学习"]
 }
 ```
 
@@ -509,7 +509,8 @@ Content-Type: application/json
     "id": 3,
     "name": "自然语言处理",
     "status": "pending",
-    "createdAt": "2025-06-20T10:30:00Z"
+    "createdAt": "2025-06-20T10:30:00Z",
+    "approvedAt": "2025-06-21T14:20:00Z"
   },
   "timestamp": "2025-08-21T13:00:00Z"
 }
@@ -533,10 +534,6 @@ Content-Type: application/json
 {
   "code": 200,
   "message": "研究方向删除成功",
-  "data": {
-    "deletedId": 3,
-    "deletedAt": "2025-06-20T10:30:00Z"
-  },
   "timestamp": "2025-08-21T13:00:00Z"
 }
 ```
@@ -635,7 +632,7 @@ Content-Type: application/json
 
 ```json
 {
-  "customDirection": "量子计算与算法"
+  "name": "量子计算与算法"
 }
 ```
 
@@ -652,8 +649,8 @@ Content-Type: application/json
   "code": 200,
   "message": "自定义研究方向申请已提交",
   "data": {
-    "applicationId": 123,
-    "direction": "量子计算与算法",
+    "id": 123,
+    "name": "量子计算与算法",
     "status": "pending",
     "submittedAt": "2025-06-20T10:30:00Z"
   },
