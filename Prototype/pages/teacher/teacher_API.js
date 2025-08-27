@@ -286,21 +286,6 @@ export const updatePassword = (passwordData) => {
 // ===================== 9. 用户认证接口 =====================
 
 /**
- * 用户登录
- * @param {string} username - 用户名
- * @param {string} password - 密码
- * @param {string} userType - 用户类型（默认teacher）
- * @returns {Promise}
- */
-export const loginUser = (username, password, userType = 'teacher') => {
-  return request({
-    url: '/auth/login',
-    method: 'POST',
-    data: { username, password, userType }
-  });
-};
-
-/**
  * 用户登出
  * @returns {Promise}
  */
