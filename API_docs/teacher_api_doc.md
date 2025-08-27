@@ -852,194 +852,9 @@ ws://localhost:8080/ws
 }
 ```
 
-## 12. 管理员专用接口
-
-### 12.1 获取所有用户时间选择统计
-
-**接口地址**: `GET /teacher/admin/time-selection-stats`
-
-**权限要求**: 管理员权限
-
-**请求参数**:
-
-| 参数 | 类型   | 必填 | 说明                         |
-| ---- | ------ | ---- | ---------------------------- |
-| date | string | 否   | 指定日期过滤，格式YYYY-MM-DD |
-
-**响应示例**:
-
-```json
-{
-  "code": 200,
-  "message": "success",
-  "data": {
-    "totalUsers": 50,
-    "submittedUsers": 45,
-    "submissionRate": 0.9,
-    "slotStats": {
-      "2025-06-26-morning-1": {
-        "slotInfo": {
-          "date": "2025-06-26",
-          "period": "上午",
-          "time": "09:00-09:45"
-        },
-        "selectedCount": 30,
-        "availableUsers": ["user1", "user2"]
-      }
-    },
-    "deadline": "2025-08-25T18:00:00Z",
-    "isDeadlinePassed": false
-  },
-  "timestamp": "2025-08-21T13:00:00Z"
-}
-```
-
-### 12.2 生成评审任务分配
-
-**接口地址**: `POST /teacher/admin/generate-assignments`
-
-**权限要求**: 管理员权限
-
-**请求参数**:
-
-```json
-{
-  "students": [
-    {
-      "id": "student1",
-      "name": "李明",
-      "researchField": "人工智能",
-      "preferredDate": "2025-06-26",
-      "preferredPeriod": "morning"
-    }
-  ],
-  "locations": [
-    {
-      "id": "room1",
-      "name": "科研楼A座 301会议室",
-      "capacity": 2
-    }
-  ],
-  "assignmentRules": {
-    "reviewersPerStudent": 2,
-    "maxTasksPerReviewer": 5
-  }
-}
-```
-
-**响应示例**:
-
-```json
-{
-  "code": 200,
-  "message": "评审任务分配生成成功",
-  "data": {
-    "assignments": [
-      {
-        "studentId": "student1",
-        "studentName": "李明",
-        "slotId": "2025-06-26-morning-1",
-        "timeRange": "09:00-09:45",
-        "location": "科研楼A座 301会议室",
-        "reviewers": [
-          {
-            "userId": "reviewer1",
-            "name": "张教授",
-            "role": "评审一号"
-          },
-          {
-            "userId": "reviewer2", 
-            "name": "王教授",
-            "role": "评审二号"
-          }
-        ]
-      }
-    ],
-    "stats": {
-      "totalAssignments": 1,
-      "successfulAssignments": 1,
-      "failedAssignments": 0,
-      "conflicts": []
-    }
-  },
-  "timestamp": "2025-08-21T13:00:00Z"
-}
-```
-
-### 12.3 发送系统通知
-
-**接口地址**: `POST /teacher/admin/notifications`
-
-**权限要求**: 管理员权限
-
-**请求参数**:
-
-```json
-{
-  "type": "schedule_update",
-  "title": "评审时间安排更新",
-  "content": "管理员已更新评审时间配置，请重新确认您的可用时间",
-  "recipients": ["all"],
-  "priority": "normal"
-}
-```
-
-**参数说明**:
-
-| 参数       | 类型   | 必填 | 说明                                                        |
-| ---------- | ------ | ---- | ----------------------------------------------------------- |
-| type       | string | 是   | 通知类型：schedule_update/task_assigned/deadline_reminder等 |
-| title      | string | 是   | 通知标题                                                    |
-| content    | string | 是   | 通知内容                                                    |
-| recipients | array  | 是   | 接收者，["all"]表示所有用户，或具体用户ID数组               |
-| priority   | string | 否   | 优先级：low/normal/high，默认normal                         |
-
-**响应示例**:
-
-```json
-{
-  "code": 200,
-  "message": "通知发送成功",
-  "data": {
-    "notificationId": 123,
-    "sentTo": 50,
-    "failed": 0,
-    "sentAt": "2025-06-20T10:30:00Z"
-  },
-  "timestamp": "2025-08-21T13:00:00Z"
-}
-```
-
 ## 13. 错误处理
 
 ### 13.1 常见错误响应
-
-**配置验证失败**:
-
-```json
-{
-  "code": 400,
-  "message": "配置验证失败",
-  "data": {
-    "errors": [
-      "评审时长必须大于0分钟",
-      "第1天 上午时间段太短，无法安排一场评审（需要至少45分钟）"
-    ]
-  },
-  "timestamp": "2025-08-21T13:00:00Z"
-}
-```
-
-**权限不足**:
-
-```json
-{
-  "code": 403,
-  "message": "权限不足，需要管理员权限",
-  "data": null,
-  "timestamp": "2025-08-21T13:00:00Z"
-}
-```
 
 **截止时间已过**:
 
@@ -1268,9 +1083,10 @@ const confirmResearchDirection = (direction) => {
 
 ## 17. 更新日志
 
-| 版本 | 更新时间   | 更新内容                     |
-| ---- | ---------- | ---------------------------- |
-| v1.0 | 2025-07-31 | 初始版本，包含基础功能接口   |
-| v1.1 | 2025-08-21 | 添加"全部标记通知为已读"接口 |
+| 版本 | 更新时间   | 更新内容                                               |
+| ---- | ---------- | ------------------------------------------------------ |
+| v1.0 | 2025-07-31 | 初始版本，包含基础功能接口                             |
+| v1.1 | 2025-08-21 | 添加"全部标记通知为已读"接口                           |
+| v1.2 | 2025-08-27 | 删除`12. 管理员专用接口`和`13.1 配置验证失败 权限不足` |
 
 *本文档最后更新时间：2025-08-21*
