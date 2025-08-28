@@ -489,15 +489,9 @@ Content-Type: application/json
 
 ```json
 {
-  "name": ["自然语言处理", "计算机视觉", "机器学习"]
+  "researchAreaIds": [3,4]
 }
 ```
-
-**参数说明**:
-
-| 参数 | 类型   | 必填 | 说明                     |
-| ---- | ------ | ---- | ------------------------ |
-| name | string | 是   | 研究方向名称，2-50个字符 |
 
 **响应示例**:
 
@@ -506,11 +500,22 @@ Content-Type: application/json
   "code": 200,
   "message": "研究方向添加成功",
   "data": {
-    "id": 3,
-    "name": "自然语言处理",
-    "status": "pending",
-    "createdAt": "2025-06-20T10:30:00Z",
-    "approvedAt": "2025-06-21T14:20:00Z"
+      [
+      	{
+          "id": 3,
+    	  "name": "自然语言处理",
+    	  "status": "approved",
+    	  "createdAt": "2025-06-20T10:30:00Z",
+    	  "approvedAt": "2025-06-21T14:20:00Z"
+        },
+      	{
+          "id": 3,
+    	  "name": "机器学习",
+    	  "status": "approved",
+    	  "createdAt": "2025-06-20T10:30:00Z",
+    	  "approvedAt": "2025-06-21T14:20:00Z"
+        }
+      ]
   },
   "timestamp": "2025-08-21T13:00:00Z"
 }
@@ -518,7 +523,7 @@ Content-Type: application/json
 
 ### 7.3 删除研究方向
 
-**接口地址**: `DELETE /teacher/research-areas/{areaId}`
+**接口地址**: `DELETE /teacher/research-areas`
 
 **路径参数**:
 
@@ -526,7 +531,13 @@ Content-Type: application/json
 | ------ | ------ | ---- | ---------- |
 | areaId | number | 是   | 研究方向ID |
 
-**请求参数**: 无
+**请求参数**: 
+
+```markdown
+{
+  "researchAreaIds": [3,4]
+}
+```
 
 **响应示例**:
 
