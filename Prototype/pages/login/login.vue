@@ -56,14 +56,15 @@
 				<view class="input-container">
 					<view class="input-wrapper" :class="{ focused: passwordFocused, filled: loginForm.password }">
 						<text class="input-label">密码</text>
-						<input 
-							class="input-field" 
-							:type="passwordVisible ? 'text' : 'password'" 
-							v-model="loginForm.password"
-							@focus="passwordFocused = true"
-							@blur="passwordFocused = false"
-							maxlength="20"
-						/>
+					<input 
+						class="input-field"
+						:class="{ masked: !passwordVisible }"
+						type="text"
+						v-model="loginForm.password"
+						@focus="passwordFocused = true"
+						@blur="passwordFocused = false"
+						maxlength="20"
+					/>
 						<view class="password-toggle" @click="togglePasswordVisibility">
 							<image 
 								class="password-icon" 
@@ -456,6 +457,11 @@ onLoad(() => {
 	font-size: 32rpx;
 	color: #1d1d1f;
 	box-sizing: border-box;
+}
+
+/* 避免 Edge 的原生眼睛：改用文字遮罩 */
+.input-field.masked {
+	-webkit-text-security: disc;
 }
 
 /* 密码输入框特殊处理 */
