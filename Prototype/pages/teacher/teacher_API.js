@@ -265,6 +265,18 @@ export const applyCustomResearchDirection = (customDirection) => {
   });
 };
 
+// ===================== 7.1 兼容旧调用方式 =====================
+// 供旧页面通过 researchAPI / confirmationAPI 调用
+export const researchAPI = {
+  getDirections: fetchResearchDirections,
+  applyCustomDirection: applyCustomResearchDirection
+};
+
+export const confirmationAPI = {
+  getResearchConfirmation: fetchResearchConfirmation,
+  saveResearchConfirmation
+};
+
 // ===================== 8. 密码管理接口 =====================
 
 /**
