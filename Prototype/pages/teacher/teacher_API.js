@@ -40,11 +40,12 @@ const request = (options) => {
 
 /**
  * 获取当前时间配置
+ * @param {string} year - 年份（默认今年）
  * @returns {Promise}
  */
-export const fetchTimeConfig = () => {
+export const fetchTimeConfig = (year = new Date().getFullYear().toString()) => {
   return request({
-    url: '/teacher/time-config',
+    url: `/teacher/time-config?year=${year}`,
     method: 'GET'
   });
 };
@@ -53,11 +54,12 @@ export const fetchTimeConfig = () => {
 
 /**
  * 获取用户时间选择
+ * @param {string} academicYear - 学年（默认 "2026"）
  * @returns {Promise}
  */
-export const fetchUserTimeSelection = () => {
+export const fetchUserTimeSelection = (academicYear = '2026') => {
   return request({
-    url: '/teacher/user/time-selection',
+    url: `/teacher/user/time-selection?academicYear=${academicYear}`,
     method: 'GET'
   });
 };
@@ -65,13 +67,28 @@ export const fetchUserTimeSelection = () => {
 /**
  * 保存用户时间选择
  * @param {array} selectedSlots - 选中的时间段ID数组
+ * @param {string} academicYear - 学年（默认 "2026"）
  * @returns {Promise}
  */
-export const saveTimeSelection = (selectedSlots) => {
+export const saveTimeSelection = (selectedSlots, academicYear = '2026') => {
   return request({
-    url: '/teacher/user/time-selection',
+    url: `/teacher/user/time-selection?academicYear=${academicYear}`,
     method: 'POST',
     data: { selectedSlots }
+  });
+};
+
+/**
+ * 确认用户时间选择
+ * @param {string} academicYear - 学年（默认 "2026"）
+ * @param {array} slotIds - 选中的时间段ID数组
+ * @returns {Promise}
+ */
+export const confirmTimeSelection = (academicYear = '2026', slotIds = []) => {
+  return request({
+    url: '/teacher/user/time-selection-confirm',
+    method: 'POST',
+    data: { academicYear, slotIds }
   });
 };
 
@@ -221,7 +238,7 @@ export const deleteResearchArea = (areaId) => {
  */
 export const fetchResearchDirections = () => {
   return request({
-    url: '/teacher/research-directions',
+    url: '/teacher/research-areas',
     method: 'GET'
   });
 };
@@ -241,27 +258,31 @@ export const fetchResearchConfirmation = () => {
 
 /**
  * 保存研究方向确认
- * @param {string} direction - 确认的研究方向
+ * @param {array} researchAreaIds - 研究方向ID数组，如 [1, 2, 3]
  * @returns {Promise}
  */
-export const saveResearchConfirmation = (direction) => {
+export const saveResearchConfirmation = (researchAreaIds) => {
   return request({
-    url: '/teacher/research-confirmation',
-    method: 'POST',
-    data: { direction }
+    url: '/teacher/research-areas',
+    method: 'PUT',
+    data: { researchAreaIds }
   });
 };
 
 /**
  * 申请自定义研究方向
- * @param {string} customDirection - 自定义研究方向名称
+ * @param {object} data - 自定义研究方向数据
+ * @param {number} data.id - ID
+ * @param {string} data.name - 研究方向名称
+ * @param {string} data.status - 状态
+ * @param {string} data.submittedAt - 提交时间
  * @returns {Promise}
  */
-export const applyCustomResearchDirection = (customDirection) => {
+export const applyCustomResearchDirection = (data) => {
   return request({
     url: '/teacher/custom-research-direction',
     method: 'POST',
-    data: { customDirection }
+    data: data
   });
 };
 
@@ -571,4 +592,46 @@ export const wsManager = {
       maxReconnectAttempts: this.maxReconnectAttempts
     };
   }
+};
+
+// ===================== 兼容 profile.vue 等页面的导出 =====================
+
+export const teacherAPI = {
+  getProfile: fetchTeacherProfile,
+  getResearchAreas: fetchTeacherResearchAreas,
+  addResearchArea: addResearchArea,
+  deleteResearchArea: deleteResearchArea,
+  updatePassword: updatePassword
+};
+
+export const authAPI = {
+  logout: logoutUser,
+  refreshToken: refreshToken
+};
+
+export const apiUtils = {
+  getToken: getToken,
+  request: request
+};
+
+// ===================== 兼容 schedule.vue / notification.vue 的导出 =====================
+
+export const timeSelectionAPI = {
+  getTimeConfig: fetchTimeConfig,
+  getUserTimeSelection: fetchUserTimeSelection,
+  getDeadline: fetchDeadline,
+  saveTimeSelection: saveTimeSelection,
+  confirmTimeSelection: confirmTimeSelection
+};
+
+export const reviewAPI = {
+  getReviewTasks: fetchReviewTasks,
+  updateTaskStatus: updateTaskStatus
+};
+
+export const notificationAPI = {
+  getNotifications: fetchNotifications,
+  checkNewNotifications: checkNewNotifications,
+  markAsRead: markNotificationAsRead,
+  markAllAsRead: markAllNotificationsAsRead
 };

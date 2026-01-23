@@ -117,7 +117,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { researchAPI, apiUtils } from '@/pages/teacher/teacher_API.js'
+import { researchAPI, confirmationAPI, apiUtils } from '@/pages/teacher/teacher_API.js'
 
 // 响应式数据
 const originalSelectedAreas = ref([])
@@ -170,12 +170,29 @@ const loadAllDirections = async () => {
   try {
     const response = await researchAPI.getDirections()
     if (response.code === 200) {
-      // 将字符串数组转换为对象数组，便于处理
-      allAreas.value = response.data.directions.map((name, index) => ({
-        id: `system_${index}`,
-        name: name,
+      const directions = response.data || []
+      
+      // 处理接口返回的数据格式: [{skillId, skillName, selected}, ...]
+      allAreas.value = directions.map(item => ({
+        id: item.skillId,
+        name: item.skillName,
         isNew: false
       }))
+      
+      // 从接口数据中提取已选中的研究方向
+      const selectedFromApi = directions
+        .filter(item => item.selected)
+        .map(item => ({
+          id: item.skillId,
+          name: item.skillName,
+          status: 'approved'
+        }))
+      
+      // 更新已选择的研究方向
+      if (selectedFromApi.length > 0) {
+        selectedAreas.value = selectedFromApi
+        originalSelectedAreas.value = [...selectedFromApi]
+      }
     }
   } catch (error) {
     console.error('加载研究方向列表失败:', error)
@@ -235,59 +252,32 @@ const handleSave = async () => {
   try {
     loading.value = true
     
-    // 分别处理添加和删除的研究方向
-    const currentNames = selectedAreas.value.map(area => area.name)
-    const originalNames = originalSelectedAreas.value.map(area => area.name)
+    // 收集所有选中的研究方向ID
+    const researchAreaIds = selectedAreas.value.map(area => area.id)
     
-    // 找出新增的研究方向
-    const addedAreas = selectedAreas.value.filter(area => 
-      !originalNames.includes(area.name)
-    )
+    // 调用保存接口
+    const response = await confirmationAPI.saveResearchConfirmation(researchAreaIds)
     
-    // 找出删除的研究方向
-    const deletedAreas = originalSelectedAreas.value.filter(area => 
-      !currentNames.includes(area.name)
-    )
-    
-    // 处理新增的研究方向
-    for (const area of addedAreas) {
-      try {
-        await researchAPI.addResearchArea(area.name)
-      } catch (error) {
-        console.error('添加研究方向失败:', area.name, error)
-        apiUtils.handleError(error, `添加"${area.name}"失败`)
-      }
+    if (response.code === 200) {
+      // 更新原始数据
+      originalSelectedAreas.value = [...selectedAreas.value]
+      hasChanges.value = false
+      
+      // 更新本地存储
+      const teacherInfo = uni.getStorageSync('teacherInfo') || {}
+      teacherInfo.researchAreas = selectedAreas.value
+      uni.setStorageSync('teacherInfo', teacherInfo)
+      
+      // 触发更新事件
+      uni.$emit('teacherResearchAreasUpdated', selectedAreas.value)
+      
+      // 显示成功提示
+      showSuccessToast.value = true
+      setTimeout(() => {
+        showSuccessToast.value = false
+        uni.reLaunch({ url: '/pages/teacher/profile' })
+      }, 1500)
     }
-    
-    // 处理删除的研究方向
-    for (const area of deletedAreas) {
-      if (area.id) {
-        try {
-          await researchAPI.deleteResearchArea(area.id)
-        } catch (error) {
-          console.error('删除研究方向失败:', area.name, error)
-          apiUtils.handleError(error, `删除"${area.name}"失败`)
-        }
-      }
-    }
-    
-    // 重新加载数据
-    await loadTeacherResearchAreas()
-    
-    // 更新本地存储
-    const teacherInfo = uni.getStorageSync('teacherInfo') || {}
-    teacherInfo.researchAreas = selectedAreas.value
-    uni.setStorageSync('teacherInfo', teacherInfo)
-    
-    // 触发更新事件
-    uni.$emit('teacherResearchAreasUpdated', selectedAreas.value)
-    
-    // 显示成功提示
-    showSuccessToast.value = true
-    setTimeout(() => {
-      showSuccessToast.value = false
-      uni.reLaunch({ url: '/pages/teacher/profile' })
-    }, 1500)
     
   } catch (error) {
     console.error('保存失败:', error)
@@ -312,7 +302,7 @@ const toggleArea = (area) => {
     const newArea = {
       id: area.id || `temp_${Date.now()}`,
       name: area.name,
-      status: 'pending', // 新添加的都是待审核状态
+      status: 'approved',
       createdAt: new Date().toISOString()
     }
     selectedAreas.value.push(newArea)
