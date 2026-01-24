@@ -112,13 +112,17 @@ const loadNotifications = async (reset = true) => {
       hasMore.value = true
     }
     
-    const params = {
+   /* const params = {
       page: currentPage.value,
       limit: pageSize.value,
       unreadOnly: false
-    }
+    } */
     
-    const response = await notificationAPI.getNotifications(params)
+    const response = await notificationAPI.getNotifications(
+		currentPage.value, 
+		pageSize.value, 
+		false
+	)
     
     if (response.code === 200) {
       const { notifications, pagination, unreadCount: serverUnreadCount } = response.data
@@ -137,7 +141,9 @@ const loadNotifications = async (reset = true) => {
     
   } catch (error) {
     console.error('加载通知失败:', error)
-    apiUtils.handleError(error, '加载通知失败')
+    //apiUtils.handleError(error, '加载通知失败')
+	console.error('加载通知失败:', error)
+	uni.showToast({ title: '加载通知失败', icon: 'none' })
   } finally {
     loading.value = false
     refreshing.value = false
@@ -262,7 +268,10 @@ const handleNotificationClick = async (notification, index) => {
     
   } catch (error) {
     console.error('处理通知点击失败:', error)
-    apiUtils.handleError(error, '操作失败')
+    //apiUtils.handleError(error, '操作失败')
+	console.error('操作失败:', error)
+	uni.showToast({ title: '操作失败', icon: 'none' })
+	
   }
 }
 
@@ -288,7 +297,9 @@ const markAllAsRead = async () => {
   } catch (error) {
     apiUtils.hideLoading()
     console.error('标记全部已读失败:', error)
-    apiUtils.handleError(error, '标记失败')
+    //apiUtils.handleError(error, '标记失败')
+	console.error('标记失败:', error)
+	uni.showToast({ title: '标记失败', icon: 'none' })
   }
 }
 
@@ -374,9 +385,14 @@ defineExpose({
 /* 通知列表 */
 .notification-list {
   flex: 1;
+  height: 0; /* Important for flex items to scroll */
   padding: 24rpx 32rpx;
 }
-
+.notification-container {
+  height: 100vh; /* Ensure container is full height */
+  display: flex;
+  flex-direction: column;
+}
 .notification-item {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(20rpx);

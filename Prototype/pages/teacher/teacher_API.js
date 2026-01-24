@@ -251,7 +251,7 @@ export const fetchResearchDirections = () => {
  */
 export const fetchResearchConfirmation = () => {
   return request({
-    url: '/teacher/research-confirmation',
+    url: '/teacher/research-directions',
     method: 'GET'
   });
 };

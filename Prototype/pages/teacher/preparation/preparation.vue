@@ -21,7 +21,7 @@
       <!-- 研究方向信息展示卡片 -->
       <view class="research-card">
         <view class="card-header">
-          <text class="edit-btn" @click="toggleEditMode" v-if="!isEditing">编辑</text>
+          <text class="edit-btn" @click="toggleEditMode" v-if="!isEditing">adding</text>
         </view>
 
         <!-- 非编辑模式 - 显示信息 -->
@@ -36,6 +36,10 @@
                 class="research-tag"
               >
                 {{ area.skillName }}
+				
+				<view class="delete-btn" @click.stop="handleDelete(area)">
+				      <text class="delete-icon">×</text>
+				</view>
               </view>
             </view>
           </view>
@@ -51,7 +55,7 @@
             <picker 
               :value="editData.directionIndex" 
               :range="researchDirections" 
-              range-key="name"
+              range-key="skillName"
               @change="onDirectionChange"
               class="direction-picker"
             >
@@ -112,7 +116,8 @@ import {
   fetchResearchConfirmation, 
   saveResearchConfirmation, 
   applyCustomResearchDirection,
-  fetchTeacherResearchAreas
+  fetchTeacherResearchAreas,
+  deleteResearchArea
 } from '@/pages/teacher/teacher_API.js'
 
 // 响应式数据
@@ -211,7 +216,7 @@ const saveLocalData = () => {
 
 const toggleEditMode = () => {
   isEditing.value = true
-  const idx = researchDirections.value.findIndex(item => item.name === currentResearch.value.direction)
+  const idx = researchDirections.value.findIndex(item => item.skillName === currentResearch.value.direction)
   
   if (idx === -1) {
     // 不是预设列表，视为自定义
@@ -232,7 +237,7 @@ const toggleEditMode = () => {
 const onDirectionChange = (e) => {
   const index = e.detail.value
   editData.value.directionIndex = index
-  editData.value.direction = researchDirections.value[index]?.name || ''
+  editData.value.direction = researchDirections.value[index]?.skillName || ''
   editData.value.customDirection = '' // 清空手动输入
 }
 
@@ -249,6 +254,50 @@ const cancelEdit = () => {
   isEditing.value = false
   editData.value = {}
 }
+
+
+// ✅ 新增：处理删除逻辑
+const handleDelete = (item) => {
+  uni.showModal({
+    title: '确认删除',
+    content: `确定要移除研究方向 "${item.skillName}" 吗？`,
+    success: async (res) => {
+      if (res.confirm) {
+        try {
+          uni.showLoading({ title: '删除中...' });
+          
+          // 1. 调用后端接口删除
+          // 注意：item.id 是 skill表的主键，但删除接口可能需要 teacher_skill 表的关联ID
+          // 如果你的 deleteResearchArea 接收的是 skillId，那就传 item.skillId
+          // 如果你的后端是 restful 风格删除单个方向，通常传 skillId 即可（取决于后端实现）
+          await deleteResearchArea(item.skillId);
+          
+          // 2. 更新本地视图 (直接从数组中移除，不用重新请求接口，体验更好)
+          teacherResearchAreas.value = teacherResearchAreas.value.filter(
+            area => area.skillId !== item.skillId
+          );
+          
+          // 更新 currentResearch 显示文本
+          const selected = teacherResearchAreas.value.filter(i => i.selected);
+          if (selected.length > 0) {
+            currentResearch.value.direction = selected.map(i => i.skillName).join('、');
+          } else {
+            currentResearch.value.direction = '';
+          }
+
+          uni.showToast({ title: '已移除', icon: 'success' });
+          
+        } catch (error) {
+          console.error('删除失败:', error);
+          uni.showToast({ title: '删除失败', icon: 'none' });
+        } finally {
+          uni.hideLoading();
+        }
+      }
+    }
+  });
+}
+
 
 const saveChanges = async () => {
   let finalDirection = ''
@@ -697,5 +746,44 @@ onMounted(() => {
 .confirm-btn.disabled {
   background: #d1d1d6;
   color: #86868b;
+}
+
+
+/* 修改 .research-tag 使其支持 Flex 布局 */
+.research-tag {
+  background: linear-gradient(135deg, #007aff 0%, #5856d6 100%);
+  color: #ffffff;
+  padding: 12rpx 20rpx 12rpx 28rpx; /* 右边padding改小一点，给按钮留位置 */
+  border-radius: 30rpx;
+  font-size: 28rpx;
+  font-weight: 500;
+  box-shadow: 0 4rpx 12rpx rgba(0, 122, 255, 0.25);
+  
+  /* ✅ 新增 Flex 布局 */
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+/* ✅ 新增 删除按钮样式 */
+.delete-btn {
+  width: 36rpx;
+  height: 36rpx;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.delete-btn:active {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.delete-icon {
+  font-size: 28rpx;
+  line-height: 1;
+  margin-top: -2rpx; /* 微调位置 */
+  color: #fff;
 }
 </style>
