@@ -9,7 +9,7 @@ const request = (options) => {
       ...options,
       header: {
         'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json;charset=UTF-8',
         ...options.header
       },
       success: (res) => {
@@ -142,7 +142,7 @@ export const updateTaskStatus = (taskId, status, notes = '') => {
  */
 export const fetchNotifications = (page = 1, limit = 20, unreadOnly = false) => {
   return request({
-    url: `/teacher/user/notifications?page=${page}&limit=${limit}&unreadOnly=${unreadOnly}`,
+    url: `/user/notifications?page=${page}&limit=${limit}&unreadOnly=${unreadOnly}`,
     method: 'GET'
   });
 };

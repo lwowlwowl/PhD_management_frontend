@@ -119,7 +119,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { researchAPI, confirmationAPI, apiUtils } from '@/pages/teacher/teacher_API.js'
 
-// 响应式数据
+// 响应式数据 （和输入框绑定，暂存用户输入的变量）
 const originalSelectedAreas = ref([])
 const selectedAreas = ref([])
 const allAreas = ref([])
@@ -346,34 +346,54 @@ const addNewArea = async () => {
   }
 
   try {
-    // 先尝试申请自定义研究方向
-    await researchAPI.applyCustomDirection(inputValue)
-    
-    // 创建新的待审核研究方向
-    const newArea = {
-      id: `custom_${Date.now()}`,
-      name: inputValue,
-      status: 'pending',
-      createdAt: new Date().toISOString()
-    }
-
-    // 添加到我的研究方向
-    selectedAreas.value.push(newArea)
-
-    // 清空输入框
-    newAreaInput.value = ''
-
-    checkForChanges()
-
-    uni.showToast({
-      title: '自定义方向申请已提交',
-      icon: 'success'
-    })
-    
-  } catch (error) {
-    console.error('申请自定义研究方向失败:', error)
-    apiUtils.handleError(error, '申请失败')
-  }
+	// 【关键修改点 1】：构造符合后端 @RequestBody 的 JSON 对象
+	// 后端要的是 CustomResearchDirection 对象，所以这里传个对象，key 必须是 "name"
+    const payload = {
+          name: inputValue
+        }
+		
+		// 调用接口，注意这里传入的是对象
+		const response = await researchAPI.applyCustomDirection(payload)
+		// 【关键修改点 2】：利用后端返回的真实数据
+		    if (response.code === 200) {
+		        // response.data 就是后端返回的那个 CustomResearchDirection 对象 (含 id)
+		        const savedDirection = response.data; 
+		
+		        const newArea = {
+		          id: savedDirection.id,        // <--- 这里拿到的是真实的数据库 ID (例如: 55)
+		          name: savedDirection.name,    // 或者是 inputValue
+		          status: savedDirection.status, // 后端默认是 'pending'
+		          // 如果前端需要显示时间，可以用后端回传的 submittedAt
+		          createdAt: savedDirection.submittedAt 
+		        }
+		
+		        // 添加到“我的研究方向”
+		        selectedAreas.value.push(newArea)
+				
+		        // 【建议】：同时添加到“所有方向”缓存中，且标记为新增
+		        allAreas.value.push({
+		            id: savedDirection.id,
+		            name: savedDirection.name,
+		            isNew: true
+		        })
+		
+		        // 清空输入框
+		        newAreaInput.value = ''
+		        
+		        // 标记有变更
+		        checkForChanges()
+		
+		        uni.showToast({
+		          title: '申请已提交',
+		          icon: 'success'
+		        })
+		    }
+		    
+		  } catch (error) {
+		    console.error('申请自定义研究方向失败:', error)
+		    apiUtils.handleError(error, '申请失败')
+		  }
+		
 }
 
 const checkForChanges = () => {
