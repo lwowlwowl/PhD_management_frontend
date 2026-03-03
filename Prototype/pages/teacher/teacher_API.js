@@ -365,15 +365,22 @@ export const wsManager = {
       return;
     }
 
+    // 已连接则不重复建立
+    if (this.isConnected) {
+      console.log('WebSocket 已连接，跳过重复连接');
+      return;
+    }
+
     try {
-      this.ws = uni.connectSocket({
+      // 使用全局事件监听 API，兼容 H5 / 小程序 / App 全平台
+      uni.connectSocket({
         url: `ws://localhost:8080/ws?token=${wsToken}`,
         header: {
           'Authorization': `Bearer ${wsToken}`
         }
       });
 
-      this.ws.onOpen(() => {
+      uni.onSocketOpen(() => {
         console.log('WebSocket连接成功');
         this.isConnected = true;
         this.reconnectAttempts = 0;
@@ -381,7 +388,7 @@ export const wsManager = {
         this.emit('connected');
       });
 
-      this.ws.onMessage((res) => {
+      uni.onSocketMessage((res) => {
         try {
           const data = JSON.parse(res.data);
           this.handleMessage(data);
@@ -390,19 +397,19 @@ export const wsManager = {
         }
       });
 
-      this.ws.onClose((res) => {
+      uni.onSocketClose((res) => {
         console.log('WebSocket连接关闭', res);
         this.isConnected = false;
         this.stopHeartbeat();
         this.emit('disconnected');
-        
+
         // 非主动关闭时尝试重连
         if (res.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnect();
         }
       });
 
-      this.ws.onError((error) => {
+      uni.onSocketError((error) => {
         console.error('WebSocket连接错误:', error);
         this.isConnected = false;
         this.stopHeartbeat();
@@ -556,12 +563,11 @@ export const wsManager = {
    * 断开WebSocket连接
    */
   disconnect: function() {
-    if (this.ws && this.isConnected) {
-      this.ws.close({
+    if (this.isConnected) {
+      uni.closeSocket({
         code: 1000,
         reason: 'Normal closure'
       });
-      this.ws = null;
       this.isConnected = false;
       this.stopHeartbeat();
     }
@@ -572,8 +578,8 @@ export const wsManager = {
    * @param {object} data - 消息数据
    */
   send: function(data) {
-    if (this.ws && this.isConnected) {
-      this.ws.send({
+    if (this.isConnected) {
+      uni.sendSocketMessage({
         data: JSON.stringify(data)
       });
     } else {

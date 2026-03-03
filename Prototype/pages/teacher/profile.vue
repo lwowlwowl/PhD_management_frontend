@@ -114,7 +114,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
-import { teacherAPI, researchAPI, authAPI, apiUtils } from '@/pages/teacher/teacher_API.js'
+import { teacherAPI, researchAPI, authAPI, apiUtils, wsManager } from '@/pages/teacher/teacher_API.js'
 
 // 响应式数据
 const teacherInfo = ref({
@@ -202,10 +202,14 @@ const confirmLogout = async () => {
     console.warn('登出API调用失败，但继续清除本地数据:', error)
   }
   
+  // 断开 WebSocket 连接
+  wsManager.disconnect()
+  
   // 清除登录状态
   uni.removeStorageSync('teacherInfo')
   uni.removeStorageSync('token')
   uni.removeStorageSync('refreshToken')
+  uni.removeStorageSync('userRole')
   
   // 跳转到登录页面
   uni.reLaunch({

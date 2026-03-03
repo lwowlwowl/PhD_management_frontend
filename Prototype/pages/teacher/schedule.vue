@@ -222,7 +222,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { timeSelectionAPI, reviewAPI, notificationAPI } from '@/pages/teacher/teacher_API.js'
+import { timeSelectionAPI, reviewAPI, notificationAPI, wsManager } from '@/pages/teacher/teacher_API.js'
 
 // 响应式数据
 const scheduleData = ref([])
@@ -542,29 +542,49 @@ const initializePage = async () => {
   
   console.log('评审日程页面初始化完成')
 }
+// WebSocket 事件处理器（定义在外部，onUnmounted 才能精确移除）
+const handleWsNotification = (data) => {
+  console.log('收到新通知:', data)
+  hasNewNotification.value = true
+}
+
+const handleWsConfigUpdate = () => {
+  console.log('时间配置已更新，重新加载...')
+  loadTimeConfig()
+}
+
+const handleWsTaskAssigned = () => {
+  console.log('收到新评审任务，重新加载...')
+  loadReviewTasks()
+}
+
 onMounted(async () => {
-  // 1. 【保留】初始化页面数据（进页面必须要查一次）
+  // 1. 初始化页面数据
   await initializePage()
   
-  // 2. 【保留】更新当前时间的定时器
-  // 这个只在本地跑，不请求服务器，完全无害，用于页面显示 "2026-01-30 20:30"
+  // 2. 更新当前时间的定时器（纯本地，无网络请求）
   timer = setInterval(() => {
     currentTime.value = new Date()
   }, 60000)
   
-  // 3. 【已删除】notificationTimer 相关代码
-  // 既然用了 WebSocket，就不需要每隔一分钟去骚扰服务器了
+  // 3. 注册 WebSocket 事件监听（连接由 App.vue / login.vue 统一管理）
+  wsManager.on('notification', handleWsNotification)
+  wsManager.on('config_update', handleWsConfigUpdate)
+  wsManager.on('task_assigned', handleWsTaskAssigned)
 })
 
-// 4. 【合并优化】页面卸载时的清理逻辑
+// 页面卸载时只注销事件监听，不断开连接（其他页面还需要用）
 onUnmounted(() => {
-  console.log('页面卸载，清理定时器...')
+  console.log('schedule 页面卸载，注销 WS 事件监听...')
   
-  // 只需要清理这个时间定时器
   if (timer) {
     clearInterval(timer)
     timer = null
   }
+  
+  wsManager.off('notification', handleWsNotification)
+  wsManager.off('config_update', handleWsConfigUpdate)
+  wsManager.off('task_assigned', handleWsTaskAssigned)
 })
 // 跳转到通知页面
 

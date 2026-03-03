@@ -106,6 +106,7 @@
 import { ref, reactive, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { loginApi } from './loginAPI.js'
+import { wsManager } from '@/pages/teacher/teacher_API.js'
 
 // 响应式数据
 const greeting = ref('')
@@ -216,6 +217,10 @@ const performLogin = () => {
           phdId: loginData.phdId,
           name: loginData.name
         });
+        // teacher 角色：登录成功后立即建立 WebSocket 长连接
+        if (loginData.role === 'teacher') {
+          wsManager.connect(loginData.token)
+        }
         setTimeout(() => {
           navigateByRole(loginData.role);
         }, 1500);
