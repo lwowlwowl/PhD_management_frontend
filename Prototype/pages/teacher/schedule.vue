@@ -231,6 +231,7 @@ const saveLoading = ref(false)
 
 // 时间相关数据
 const currentTime = ref(new Date())
+const rawDeadlineDate = ref(null)  // 存储从后端获取的原始截止时间
 const deadlineInfo = ref({
   deadline: null,
   isDeadlinePassed: false,
@@ -238,6 +239,35 @@ const deadlineInfo = ref({
   formattedDeadline: '',
   countdownText: ''
 })
+
+// 根据当前时间重新计算 deadlineInfo 中的动态字段
+const recomputeDeadlineDisplay = () => {
+  if (!rawDeadlineDate.value) return
+  const deadline = rawDeadlineDate.value
+  const now = currentTime.value
+  const diff = deadline - now
+
+  const month = deadline.getMonth() + 1
+  const day = deadline.getDate()
+  const h = deadline.getHours().toString().padStart(2, '0')
+  const m = deadline.getMinutes().toString().padStart(2, '0')
+
+  let countdownText = ''
+  if (diff <= 0) {
+    countdownText = '已截止'
+  } else {
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const hoursLeft = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+    const minutesLeft = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    countdownText = days > 0
+      ? `${days}天${hoursLeft}小时${minutesLeft}分钟`
+      : `${hoursLeft}小时${minutesLeft}分钟`
+  }
+
+  deadlineInfo.value.formattedDeadline = `${month}月${day}日 ${h}:${m}`
+  deadlineInfo.value.countdownText = countdownText
+  deadlineInfo.value.remainingTime = diff
+}
 const timeSlots = ref([])  // 存储接口返回的时间段数组
 const showTimeSelection = ref(false)
 const academicYear = ref('2026')  // 学年参数，默认2026年
@@ -385,13 +415,23 @@ const loadSavedTimeSelection = () => {
 }
 
 // 加载截止时间信息
+// 后端返回 DeadlineVO: { deadline: LocalDateTime, currentTime: LocalDateTime, isOpen: Boolean }
 const loadDeadlineInfo = async () => {
   try {
     const response = await timeSelectionAPI.getDeadline()
     if (response.code === 200) {
-      deadlineInfo.value = response.data
-      // 更新当前时间
-      currentTime.value = new Date(response.data.currentTime)
+      const { deadline, currentTime: serverTime, isOpen } = response.data
+
+      // 用服务器时间校正本地时间，防止客户端时钟偏差
+      currentTime.value = new Date(serverTime)
+
+      // isOpen=true 表示通道还开着（截止前）；isOpen=false 表示已截止
+      rawDeadlineDate.value = new Date(deadline)
+      deadlineInfo.value.deadline = rawDeadlineDate.value
+      deadlineInfo.value.isDeadlinePassed = !isOpen
+
+      // 计算格式化显示字段
+      recomputeDeadlineDisplay()
     }
   } catch (error) {
     console.error('加载截止时间失败:', error)
@@ -562,9 +602,10 @@ onMounted(async () => {
   // 1. 初始化页面数据
   await initializePage()
   
-  // 2. 更新当前时间的定时器（纯本地，无网络请求）
+  // 2. 每分钟更新当前时间并重算倒计时显示
   timer = setInterval(() => {
     currentTime.value = new Date()
+    recomputeDeadlineDisplay()
   }, 60000)
   
   // 3. 注册 WebSocket 事件监听（连接由 App.vue / login.vue 统一管理）
