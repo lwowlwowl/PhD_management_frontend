@@ -438,12 +438,49 @@ const loadDeadlineInfo = async () => {
   }
 }
 
+// 将后端扁平数组转换为模板所需的按日期分组结构
+const transformReviewTasks = (flatTasks) => {
+  const groups = {}
+  flatTasks.forEach(task => {
+    const dateKey = task.startTime.split('T')[0]  // "2025-07-10"
+    if (!groups[dateKey]) {
+      groups[dateKey] = {
+        dateKey,
+        date: formatDate(task.startTime),
+        weekday: getWeekday(task.startTime),
+        tasks: []
+      }
+    }
+    // 状态映射：后端 "scheduled" 对应前端 "pending"（显示"开始评审"按钮）
+    const statusMap = {
+      'scheduled': 'pending',
+      'in_progress': 'in-progress',
+      'completed': 'completed',
+      'cancelled': 'cancelled'
+    }
+    groups[dateKey].tasks.push({
+      id: task.reviewId,
+      timeRange: `${formatTime(task.startTime)} - ${formatTime(task.endTime)}`,
+      studentName: task.phdName,
+      researchField: task.researchField,
+      location: task.location,
+      myRole: task.assessors || '评审员',   // 后端 assessors 为 null 时默认显示"评审员"
+      coAssessor: task.coAssessor,
+      status: statusMap[task.status] || task.status,
+      comments: task.comments
+    })
+  })
+  // 按日期升序排列
+  return Object.values(groups).sort((a, b) => a.dateKey.localeCompare(b.dateKey))
+}
+
 // 加载评审任务
 const loadReviewTasks = async () => {
   try {
     const response = await reviewAPI.getReviewTasks()
     if (response.code === 200) {
-      scheduleData.value = response.data.scheduleData || []
+      const flatTasks = Array.isArray(response.data) ? response.data : (response.data?.scheduleData || [])
+      scheduleData.value = transformReviewTasks(flatTasks)
     }
   } catch (error) {
     console.error('加载评审任务失败:', error)
