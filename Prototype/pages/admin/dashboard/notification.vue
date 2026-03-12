@@ -54,7 +54,7 @@
         class="notification-item" 
         v-for="item in filteredNotifications" 
         :key="item.id"
-        @click="viewNotification(item)"
+        @click="editNotification(item)"
       >
         <view class="item-header">
           <view class="item-title">{{ item.title }}</view>
@@ -66,10 +66,6 @@
         <view class="item-content">{{ item.content }}</view>
         
         <view class="item-meta">
-          <view class="meta-info">
-            <text class="meta-label">接收对象：</text>
-            <text class="meta-value">{{ getRecipientText(item.recipientType) }}</text>
-          </view>
           <view class="meta-info">
             <text class="meta-label">创建时间：</text>
             <text class="meta-value">{{ formatTime(item.createTime) }}</text>
@@ -128,120 +124,12 @@
             />
           </view>
           
-          <view class="form-group">
-            <text class="form-label">接收对象</text>
-            <view class="recipient-options">
-              <view 
-                class="recipient-option" 
-                :class="{ active: formData.recipientType === 'all' }"
-                @click="selectRecipient('all')"
-              >
-                全部用户
-              </view>
-              <view 
-                class="recipient-option" 
-                :class="{ active: formData.recipientType === 'teacher' }"
-                @click="selectRecipient('teacher')"
-              >
-                老师
-              </view>
-              <view 
-                class="recipient-option" 
-                :class="{ active: formData.recipientType === 'student' }"
-                @click="selectRecipient('student')"
-              >
-                博士生
-              </view>
-            </view>
-          </view>
-          
-          <view class="form-group" v-if="formData.recipientType !== 'all'">
-            <text class="form-label">
-              {{ formData.recipientType === 'teacher' ? '选择老师' : '选择博士生' }}
-            </text>
-            <view class="specific-recipients" @click="showRecipientSelector">
-              <template v-if="formData.specificRecipients.length">
-                <view class="selected-recipients">
-                  <text v-for="user in selectedRecipientNames" :key="user" class="recipient-tag">{{ user }}</text>
-                </view>
-              </template>
-              <template v-else>
-                <text class="recipients-hint">点击选择具体接收人员</text>
-              </template>
-            </view>
-          </view>
-          
-          <view class="form-group">
-            <text class="form-label">发送方式</text>
-            <view class="send-options">
-              <view 
-                class="send-option" 
-                :class="{ active: formData.sendType === 'immediate' }"
-                @click="selectSendType('immediate')"
-              >
-                立即发送
-              </view>
-              <view 
-                class="send-option" 
-                :class="{ active: formData.sendType === 'scheduled' }"
-                @click="selectSendType('scheduled')"
-              >
-                定时发送
-              </view>
-              <view 
-                class="send-option" 
-                :class="{ active: formData.sendType === 'draft' }"
-                @click="selectSendType('draft')"
-              >
-                保存草稿
-              </view>
-            </view>
-          </view>
-          
-          <view class="form-group" v-if="formData.sendType === 'scheduled'">
-            <text class="form-label">发送时间</text>
-            <picker 
-              mode="multiSelector" 
-              :value="[dateIndex, timeIndex]" 
-              :range="[dateRange, timeRange]"
-              @change="bindScheduleChange"
-            >
-              <view class="schedule-picker">
-                {{ formData.scheduleTime || '请选择发送时间' }}
-              </view>
-            </picker>
-          </view>
         </view>
         
         <view class="modal-footer">
           <button class="modal-btn cancel" @click="closeModal">取消</button>
-          <button class="modal-btn confirm" @click="handleSubmit">确定</button>
-        </view>
-      </view>
-    </uni-popup>
-
-    <!-- 选择接收人员弹窗 -->
-    <uni-popup ref="recipientSelector" type="bottom">
-      <view class="modal-content">
-        <view class="modal-header">
-          <text class="modal-title">选择{{ formData.recipientType === 'teacher' ? '老师' : '博士生' }}</text>
-          <view class="modal-close" @click="closeRecipientSelector">
-            <uni-icons type="close" size="20" color="#999"></uni-icons>
-          </view>
-        </view>
-        <view class="modal-body">
-          <scroll-view style="max-height: 50vh;">
-            <view v-for="user in recipientList" :key="user.id" class="recipient-item" 
-              :class="{ selected: tempSelectedRecipients.includes(user.id) }"
-              @click="toggleRecipient(user)">
-              <text class="recipient-checkbox">{{ tempSelectedRecipients.includes(user.id) ? '☑' : '☐' }}</text>
-              <text class="recipient-name">{{ user.name }}</text>
-            </view>
-          </scroll-view>
-        </view>
-        <view class="modal-footer">
-          <button class="modal-btn cancel" @click="closeRecipientSelector">取消</button>
-          <button class="modal-btn confirm" @click="confirmRecipientSelection">确定</button>
+          <button class="modal-btn draft" @click="saveDraft">保存草稿</button>
+          <button class="modal-btn confirm" @click="sendImmediately">立即发送</button>
         </view>
       </view>
     </uni-popup>
@@ -262,6 +150,13 @@
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import uniEasyinput from '@dcloudio/uni-ui/lib/uni-easyinput/uni-easyinput.vue'
+import {
+  fetchAdminNotifications,
+  createAdminNotification,
+  updateAdminNotification,
+  deleteAdminNotification,
+  sendAdminNotification
+} from '../admin_API.js'
 
 // 响应式数据
 const activeTab = ref('all')
@@ -273,87 +168,18 @@ const deleteTargetId = ref(null)
 // 表单数据
 const formData = reactive({
   title: '',
-  content: '',
-  recipientType: 'all',
-  specificRecipients: [],
-  sendType: 'immediate',
-  scheduleTime: ''
+  content: ''
 })
 
-// 时间选择器数据
-const dateIndex = ref(0)
-const timeIndex = ref(0)
-const dateRange = ref([])
-const timeRange = ref([])
 
 // 通知列表数据
-const notifications = ref([
-  {
-    id: 1,
-    title: '2024年度博士生年审安排通知',
-    content: '各位老师和博士生，2024年度博士生年审安排已经确定，请查看具体安排并按时参加。',
-    recipientType: 'all',
-    status: 'sent',
-    createTime: '2024-05-15 10:30:00',
-    sendTime: '2024-05-15 14:30:00',
-    readCount: 45,
-    totalCount: 50
-  },
-  {
-    id: 2,
-    title: '评审时间调整通知',
-    content: '由于会议室冲突，部分学生的评审时间需要调整，具体调整安排请查看系统...',
-    recipientType: 'student',
-    status: 'sent',
-    createTime: '2024-05-10 09:15:00',
-    sendTime: '2024-05-10 09:20:00',
-    readCount: 8,
-    totalCount: 12
-  },
-  {
-    id: 3,
-    title: '系统维护通知',
-    content: '系统将于本周末进行例行维护，维护期间可能无法正常访问，请提前做好准备。',
-    recipientType: 'all',
-    status: 'draft',
-    createTime: '2024-05-08 16:45:00',
-    sendTime: null,
-    readCount: 0,
-    totalCount: 0
-  }
-])
+const notifications = ref([])
 
 // 引用
 const notificationModal = ref()
 const deleteModal = ref()
 
-// 新增：模拟老师/博士生数据
-const teacherList = [
-  { id: 1, name: '张教授' },
-  { id: 2, name: '李副教授' },
-  { id: 3, name: '王教授' },
-  { id: 4, name: '陈副教授' },
-  { id: 5, name: '刘教授' }
-]
-const studentList = [
-  { id: 101, name: '博士生A' },
-  { id: 102, name: '博士生B' },
-  { id: 103, name: '博士生C' }
-]
 
-// 选择人员弹窗相关
-const recipientSelector = ref()
-const tempSelectedRecipients = ref([])
-
-const recipientList = computed(() => {
-  return formData.recipientType === 'teacher' ? teacherList : studentList
-})
-
-const selectedRecipientNames = computed(() => {
-  return recipientList.value
-    .filter(user => formData.specificRecipients.includes(user.id))
-    .map(user => user.name)
-})
 
 // 计算属性
 const filteredNotifications = computed(() => {
@@ -392,7 +218,6 @@ const handleSearch = () => {
 const showCreateModal = () => {
   isEdit.value = false
   resetFormData()
-  initTimePicker()
   notificationModal.value.open()
 }
 
@@ -403,10 +228,6 @@ const editNotification = (item) => {
   // 填充表单数据
   formData.title = item.title
   formData.content = item.content
-  formData.recipientType = item.recipientType
-  formData.sendType = item.status === 'draft' ? 'draft' : 'immediate'
-  
-  initTimePicker()
   notificationModal.value.open()
 }
 
@@ -418,92 +239,65 @@ const closeModal = () => {
 const resetFormData = () => {
   formData.title = ''
   formData.content = ''
-  formData.recipientType = 'all'
-  formData.specificRecipients = []
-  formData.sendType = 'immediate'
-  formData.scheduleTime = ''
 }
 
-const selectRecipient = (type) => {
-  formData.recipientType = type
-}
-
-const selectSendType = (type) => {
-  formData.sendType = type
-}
-
-const initTimePicker = () => {
-  // 初始化日期选择器（未来7天）
-  const dates = []
-  const times = []
-  
-  for (let i = 0; i < 7; i++) {
-    const date = new Date()
-    date.setDate(date.getDate() + i)
-    dates.push(`${date.getMonth() + 1}月${date.getDate()}日`)
-  }
-  
-  // 时间选项（每小时一个选项）
-  for (let i = 8; i <= 20; i++) {
-    times.push(`${i}:00`)
-    times.push(`${i}:30`)
-  }
-  
-  dateRange.value = dates
-  timeRange.value = times
-}
-
-const bindScheduleChange = (e) => {
-  const [dateIdx, timeIdx] = e.detail.value
-  dateIndex.value = dateIdx
-  timeIndex.value = timeIdx
-  formData.scheduleTime = `${dateRange.value[dateIdx]} ${timeRange.value[timeIdx]}`
-}
-
-const handleSubmit = async () => {
-  // 表单验证
+const validateForm = () => {
   if (!formData.title.trim()) {
     uni.showToast({ title: '请输入通知标题', icon: 'none' })
-    return
+    return false
   }
-  
   if (!formData.content.trim()) {
     uni.showToast({ title: '请输入通知内容', icon: 'none' })
-    return
+    return false
   }
-  
-  if (formData.sendType === 'scheduled' && !formData.scheduleTime) {
-    uni.showToast({ title: '请选择发送时间', icon: 'none' })
-    return
-  }
-  
+  return true
+}
+
+const saveDraft = async () => {
+  if (!validateForm()) return
   try {
-    uni.showLoading({ title: '处理中...' })
-    
-    const notificationData = {
-      title: formData.title,
-      content: formData.content,
-      recipientType: formData.recipientType,
-      specificRecipients: formData.specificRecipients,
-      sendType: formData.sendType,
-      scheduleTime: formData.scheduleTime
-    }
-    
+    uni.showLoading({ title: '保存中...' })
+    const dto = { title: formData.title, content: formData.content, recipientType: 'all' }
+    let res
     if (isEdit.value) {
-      // 更新通知
-      await updateNotification(currentEditId.value, notificationData)
-      uni.showToast({ title: '更新成功', icon: 'success' })
+      res = await updateAdminNotification(currentEditId.value, dto)
     } else {
-      // 创建通知
-      await createNotification(notificationData)
-      uni.showToast({ title: '创建成功', icon: 'success' })
+      res = await createAdminNotification(dto)
     }
-    
+    if (!res || res.code !== 200) throw new Error(res?.msg || '保存失败')
+    uni.showToast({ title: '草稿已保存', icon: 'success' })
     closeModal()
     loadNotifications()
-    
-  } catch (error) {
-    uni.showToast({ title: '操作失败', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '保存失败', icon: 'none' })
+  } finally {
+    uni.hideLoading()
+  }
+}
+
+const sendImmediately = async () => {
+  if (!validateForm()) return
+  try {
+    uni.showLoading({ title: '发送中...' })
+    const dto = { title: formData.title, content: formData.content, recipientType: 'all' }
+    let id = currentEditId.value
+    if (isEdit.value) {
+      const res = await updateAdminNotification(id, dto)
+      if (!res || res.code !== 200) throw new Error(res?.msg || '更新失败')
+    } else {
+      const res = await createAdminNotification(dto)
+      if (!res || res.code !== 200) throw new Error(res?.msg || '创建失败')
+      id = res.data?.id
+    }
+    if (id) {
+      const sendRes = await sendAdminNotification(id)
+      if (!sendRes || sendRes.code !== 200) throw new Error(sendRes?.msg || '发送失败')
+    }
+    uni.showToast({ title: '发送成功', icon: 'success' })
+    closeModal()
+    loadNotifications()
+  } catch (e) {
+    uni.showToast({ title: e.message || '发送失败', icon: 'none' })
   } finally {
     uni.hideLoading()
   }
@@ -512,11 +306,12 @@ const handleSubmit = async () => {
 const sendNotification = async (item) => {
   try {
     uni.showLoading({ title: '发送中...' })
-    await sendNotificationById(item.id)
+    const res = await sendAdminNotification(item.id)
+    if (!res || res.code !== 200) throw new Error(res?.msg || '发送失败')
     uni.showToast({ title: '发送成功', icon: 'success' })
     loadNotifications()
-  } catch (error) {
-    uni.showToast({ title: '发送失败', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '发送失败', icon: 'none' })
   } finally {
     uni.hideLoading()
   }
@@ -530,11 +325,12 @@ const deleteNotification = (item) => {
 const confirmDelete = async () => {
   try {
     uni.showLoading({ title: '删除中...' })
-    await deleteNotificationById(deleteTargetId.value)
+    const res = await deleteAdminNotification(deleteTargetId.value)
+    if (!res || res.code !== 200) throw new Error(res?.msg || '删除失败')
     uni.showToast({ title: '删除成功', icon: 'success' })
     loadNotifications()
-  } catch (error) {
-    uni.showToast({ title: '删除失败', icon: 'none' })
+  } catch (e) {
+    uni.showToast({ title: e.message || '删除失败', icon: 'none' })
   } finally {
     uni.hideLoading()
     deleteModal.value.close()
@@ -546,30 +342,14 @@ const cancelDelete = () => {
   deleteTargetId.value = null
 }
 
-const viewNotification = (item) => {
-  // 跳转到通知详情页
-  uni.navigateTo({
-    url: `/pages/admin/notification-detail?id=${item.id}`
-  })
-}
 
 // 工具方法
 const getStatusText = (status) => {
   const statusMap = {
     'draft': '草稿',
-    'sent': '已发送',
-    'scheduled': '定时发送'
+    'sent': '已发送'
   }
   return statusMap[status] || status
-}
-
-const getRecipientText = (recipientType) => {
-  const recipientMap = {
-    'all': '全部用户',
-    'teacher': '老师',
-    'student': '博士生'
-  }
-  return recipientMap[recipientType] || recipientType
 }
 
 const formatTime = (timeStr) => {
@@ -578,102 +358,20 @@ const formatTime = (timeStr) => {
   return `${date.getMonth() + 1}-${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
 }
 
-// API 调用方法（示例）
+// API 调用方法
 const loadNotifications = async () => {
-  // 实际项目中这里应该调用真实的API
-  // const response = await uni.request({
-  //   url: '/api/admin/notifications',
-  //   method: 'GET'
-  // })
-  // notifications.value = response.data
-}
-
-const createNotification = async (data) => {
-  // API调用示例
-  // return await uni.request({
-  //   url: '/api/admin/notifications',
-  //   method: 'POST',
-  //   data
-  // })
-  
-  // 模拟API调用
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const newNotification = {
-        id: Date.now(),
-        ...data,
-        status: data.sendType === 'draft' ? 'draft' : 'sent',
-        createTime: new Date().toISOString(),
-        sendTime: data.sendType === 'immediate' ? new Date().toISOString() : null,
-        readCount: 0,
-        totalCount: 50
-      }
-      notifications.value.unshift(newNotification)
-      resolve()
-    }, 1000)
-  })
-}
-
-const updateNotification = async (id, data) => {
-  // 模拟API调用
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const index = notifications.value.findIndex(item => item.id === id)
-      if (index !== -1) {
-        notifications.value[index] = { ...notifications.value[index], ...data }
-      }
-      resolve()
-    }, 1000)
-  })
-}
-
-const sendNotificationById = async (id) => {
-  // 模拟API调用
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const notification = notifications.value.find(item => item.id === id)
-      if (notification) {
-        notification.status = 'sent'
-        notification.sendTime = new Date().toISOString()
-      }
-      resolve()
-    }, 1000)
-  })
-}
-
-const deleteNotificationById = async (id) => {
-  // 模拟API调用
-  return new Promise(resolve => {
-    setTimeout(() => {
-      const index = notifications.value.findIndex(item => item.id === id)
-      if (index !== -1) {
-        notifications.value.splice(index, 1)
-      }
-      resolve()
-    }, 1000)
-  })
-}
-
-// 选择人员弹窗相关
-const showRecipientSelector = () => {
-  tempSelectedRecipients.value = [...formData.specificRecipients]
-  recipientSelector.value.open()
-}
-const closeRecipientSelector = () => {
-  recipientSelector.value.close()
-}
-const toggleRecipient = (user) => {
-  const idx = tempSelectedRecipients.value.indexOf(user.id)
-  if (idx === -1) {
-    tempSelectedRecipients.value.push(user.id)
-  } else {
-    tempSelectedRecipients.value.splice(idx, 1)
+  try {
+    const statusFilter = activeTab.value === 'all' ? '' : activeTab.value
+    const res = await fetchAdminNotifications(statusFilter, searchKeyword.value, 1, 50)
+    if (res && res.code === 200 && res.data) {
+      notifications.value = res.data.list || []
+    }
+  } catch (e) {
+    console.error('加载通知失败', e)
   }
 }
-const confirmRecipientSelection = () => {
-  formData.specificRecipients = [...tempSelectedRecipients.value]
-  closeRecipientSelector()
-}
+
+
 
 // 生命周期
 onMounted(() => {
@@ -790,11 +488,6 @@ onMounted(() => {
         &.sent {
           background-color: #d1ecf1;
           color: #0c5460;
-        }
-        
-        &.scheduled {
-          background-color: #e2e3e5;
-          color: #383d41;
         }
       }
     }
@@ -970,14 +663,6 @@ onMounted(() => {
           color: #999;
         }
       }
-      
-      .schedule-picker {
-        padding: 12px;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        font-size: 14px;
-        color: #333;
-      }
     }
   }
   
@@ -1017,21 +702,4 @@ onMounted(() => {
   vertical-align: middle;
 }
 
-// 高亮已选项
-.recipient-item.selected {
-  background: #e6f7ff;
-}
-.recipient-checkbox {
-  font-size: 18px;
-  margin-right: 8px;
-}
-.recipient-tag {
-  display: inline-block;
-  background: #e6f7ff;
-  color: #007aff;
-  border-radius: 12px;
-  padding: 2px 10px;
-  margin: 2px 4px 2px 0;
-  font-size: 12px;
-}
 </style>

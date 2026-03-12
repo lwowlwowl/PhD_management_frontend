@@ -251,7 +251,15 @@
   
   <script setup>
   import { ref, computed, onMounted } from 'vue'
-  
+  import {
+    fetchResearchAreas,
+    fetchPendingResearchAreas,
+    addResearchArea,
+    updateResearchArea,
+    deleteResearchArea,
+    reviewResearchArea
+  } from '../admin_API.js'
+
   // 响应式数据
   const currentTab = ref('all') // all, pending
   const searchKeyword = ref('')
@@ -260,118 +268,93 @@
   const showDeleteModal = ref(false)
   const showSuccessToast = ref(false)
   const toastMessage = ref('')
-  
+
   const editingArea = ref(null)
   const deletingArea = ref(null)
   const rejectingArea = ref(null)
   const selectedAreas = ref([])
   const isMultiSelectMode = ref(false)
-  
+
   const newAreaName = ref('')
   const newAreaDescription = ref('')
   const rejectReason = ref('')
-  
+
   const tabs = ref([
     { key: 'all', label: '所有方向', count: 0 },
-    { key: 'pending', label: '待审核', count: 3 }
+    { key: 'pending', label: '待审核', count: 0 }
   ])
-  
+
   // 所有研究方向
-  const allAreas = ref([
-    {
-      id: 1,
-      name: '人工智能',
-      description: '人工智能相关研究',
-      userCount: 15,
-      createDate: '2023-01-15',
-      isNew: false
-    },
-    {
-      id: 2,
-      name: '自然语言处理',
-      description: 'NLP相关研究',
-      userCount: 8,
-      createDate: '2023-02-20',
-      isNew: false
-    },
-    {
-      id: 3,
-      name: '计算机视觉',
-      description: '计算机视觉相关研究',
-      userCount: 12,
-      createDate: '2023-03-10',
-      isNew: false
-    },
-    {
-      id: 4,
-      name: '机器学习',
-      description: '机器学习算法研究',
-      userCount: 20,
-      createDate: '2023-01-05',
-      isNew: false
-    },
-    {
-      id: 5,
-      name: '深度学习',
-      description: '深度学习网络研究',
-      userCount: 18,
-      createDate: '2023-02-15',
-      isNew: false
-    }
-  ])
-  
+  const allAreas = ref([])
+
   // 待审核方向
-  const pendingAreas = ref([
-    {
-      id: 101,
-      name: '联邦学习',
-      submitter: '张教授',
-      submitterType: '老师',
-      submitDate: '2025-06-10',
-      reason: '这是一个新兴的机器学习分支，值得作为独立研究方向'
-    },
-    {
-      id: 102,
-      name: '量子计算',
-      submitter: '李明',
-      submitterType: '博士生',
-      submitDate: '2025-06-08',
-      reason: '量子计算是未来计算的重要方向'
-    },
-    {
-      id: 103,
-      name: '边缘计算',
-      submitter: '王教授',
-      submitterType: '老师',
-      submitDate: '2025-06-05',
-      reason: '边缘计算在物联网时代具有重要应用价值'
+  const pendingAreas = ref([])
+
+  // 加载所有研究方向
+  const loadAllAreas = async () => {
+    try {
+      const res = await fetchResearchAreas(searchKeyword.value, 1, 100)
+      if (res && res.code === 200 && res.data) {
+        const records = res.data.list || []
+        allAreas.value = records.map(r => ({
+          id: r.id,
+          name: r.name || '',
+          description: '',
+          userCount: r.userCount || 0,
+          createDate: r.createDate ? (typeof r.createDate === 'string' ? r.createDate.substring(0, 10) : String(r.createDate)) : '',
+          isNew: false
+        }))
+      }
+    } catch (e) {
+      console.error('加载研究方向失败', e)
     }
-  ])
-  
+  }
+
+  // 加载待审核方向
+  const loadPendingAreas = async () => {
+    try {
+      const res = await fetchPendingResearchAreas('')
+      if (res && res.code === 200 && res.data) {
+        const list = Array.isArray(res.data) ? res.data : (res.data.records || [])
+        pendingAreas.value = list.map(r => ({
+          id: r.id,
+          name: r.name || '',
+          submitter: r.submitter || '',
+          submitterType: '',
+          submitDate: r.submitDate ? (typeof r.submitDate === 'string' ? r.submitDate.substring(0, 10) : r.submitDate) : '',
+          reason: '',
+          status: r.status || 'pending'
+        }))
+      }
+    } catch (e) {
+      console.error('加载待审核方向失败', e)
+    }
+  }
+
   // 计算属性
   const filteredAllAreas = computed(() => {
     if (!searchKeyword.value.trim()) {
       return allAreas.value
     }
     const keyword = searchKeyword.value.toLowerCase()
-    return allAreas.value.filter(area => 
+    return allAreas.value.filter(area =>
       area.name.toLowerCase().includes(keyword)
     )
   })
-  
+
   const filteredPendingAreas = computed(() => {
     if (!searchKeyword.value.trim()) {
       return pendingAreas.value
     }
     const keyword = searchKeyword.value.toLowerCase()
-    return pendingAreas.value.filter(area => 
-      area.name.toLowerCase().includes(keyword) || 
+    return pendingAreas.value.filter(area =>
+      area.name.toLowerCase().includes(keyword) ||
       area.submitter.toLowerCase().includes(keyword)
     )
   })
-  
-  onMounted(() => {
-    console.log('研究方向管理页面已加载')
+
+  onMounted(async () => {
+    await Promise.all([loadAllAreas(), loadPendingAreas()])
     updateTabCounts()
   })
   
@@ -413,53 +396,51 @@
     showAddAreaModal.value = true
   }
   
-  const confirmAddArea = () => {
+  const confirmAddArea = async () => {
     if (!newAreaName.value.trim()) {
-      uni.showToast({
-        title: '请输入方向名称',
-        icon: 'none'
-      })
+      uni.showToast({ title: '请输入方向名称', icon: 'none' })
       return
     }
-  
-    // 检查是否重名
-    const exists = allAreas.value.some(area => 
-      area.name.toLowerCase() === newAreaName.value.trim().toLowerCase() && 
-      (!editingArea.value || area.id !== editingArea.value.id)
-    )
-  
-    if (exists) {
-      uni.showToast({
-        title: '该研究方向已存在',
-        icon: 'none'
-      })
-      return
-    }
-  
+
     if (editingArea.value) {
       // 编辑模式
-      const index = allAreas.value.findIndex(area => area.id === editingArea.value.id)
-      if (index > -1) {
-        allAreas.value[index].name = newAreaName.value.trim()
-        allAreas.value[index].description = newAreaDescription.value.trim()
+      try {
+        const res = await updateResearchArea(editingArea.value.id, { name: newAreaName.value.trim() })
+        if (res && res.code === 200) {
+          await loadAllAreas()
+          updateTabCounts()
+          showToast('修改成功')
+        } else {
+          uni.showToast({ title: res?.msg || '修改失败', icon: 'none' })
+          return
+        }
+      } catch (e) {
+        uni.showToast({ title: '修改失败', icon: 'none' })
+        return
       }
-      showToast('修改成功')
     } else {
       // 添加模式
-      const newArea = {
-        id: Date.now(),
-        name: newAreaName.value.trim(),
-        description: newAreaDescription.value.trim(),
-        userCount: 0,
-        createDate: new Date().toLocaleDateString(),
-        isNew: true
+      try {
+        const res = await addResearchArea({
+          name: newAreaName.value.trim(),
+          status: 'approved',
+          createdAt: new Date().toISOString()
+        })
+        if (res && res.code === 200) {
+          await loadAllAreas()
+          updateTabCounts()
+          showToast('添加成功')
+        } else {
+          uni.showToast({ title: res?.msg || '添加失败', icon: 'none' })
+          return
+        }
+      } catch (e) {
+        uni.showToast({ title: '添加失败', icon: 'none' })
+        return
       }
-      allAreas.value.unshift(newArea)
-      showToast('添加成功')
     }
-  
+
     hideAddModal()
-    updateTabCounts()
   }
   
   const toggleAreaSelection = (area) => {
@@ -498,52 +479,53 @@
     deletingArea.value = null
   }
   
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (deletingArea.value) {
       // 删除单个
-      const index = allAreas.value.findIndex(a => a.id === deletingArea.value.id)
-      if (index > -1) {
-        allAreas.value.splice(index, 1)
-      }
-      showToast('删除成功')
-    } else {
-      // 批量删除
-      selectedAreas.value.forEach(selectedArea => {
-        const index = allAreas.value.findIndex(a => a.id === selectedArea.id)
-        if (index > -1) {
-          allAreas.value.splice(index, 1)
+      try {
+        const res = await deleteResearchArea(deletingArea.value.id)
+        if (res && res.code === 200) {
+          await loadAllAreas()
+          updateTabCounts()
+          showToast('删除成功')
+        } else {
+          uni.showToast({ title: res?.msg || '删除失败', icon: 'none' })
         }
-      })
-      showToast(`已删除${selectedAreas.value.length}个研究方向`)
-      selectedAreas.value = []
-      isMultiSelectMode.value = false
+      } catch (e) {
+        uni.showToast({ title: '删除失败', icon: 'none' })
+      }
+    } else {
+      // 批量删除：逐个调用
+      const count = selectedAreas.value.length
+      try {
+        await Promise.all(selectedAreas.value.map(a => deleteResearchArea(a.id)))
+        selectedAreas.value = []
+        isMultiSelectMode.value = false
+        await loadAllAreas()
+        updateTabCounts()
+        showToast(`已删除${count}个研究方向`)
+      } catch (e) {
+        uni.showToast({ title: '部分删除失败', icon: 'none' })
+      }
     }
-  
+
     hideDeleteModal()
-    updateTabCounts()
   }
   
-  const approveArea = (area) => {
-    // 将待审核方向添加到所有方向中
-    const newArea = {
-      id: Date.now(),
-      name: area.name,
-      description: area.reason || '',
-      userCount: 0,
-      createDate: new Date().toLocaleDateString(),
-      isNew: true
+  const approveArea = async (area) => {
+    try {
+      // NOTE: ResearchAreaReviewDTO 结构待后端确认（blocker ①），当前使用 { action: 'approved' }
+      const res = await reviewResearchArea(area.id, { action: 'approved' })
+      if (res && res.code === 200) {
+        await Promise.all([loadAllAreas(), loadPendingAreas()])
+        updateTabCounts()
+        showToast(`"${area.name}"已通过审核`)
+      } else {
+        uni.showToast({ title: res?.msg || '审核失败', icon: 'none' })
+      }
+    } catch (e) {
+      uni.showToast({ title: '审核失败', icon: 'none' })
     }
-    
-    allAreas.value.unshift(newArea)
-    
-    // 从待审核列表中移除
-    const index = pendingAreas.value.findIndex(p => p.id === area.id)
-    if (index > -1) {
-      pendingAreas.value.splice(index, 1)
-    }
-    
-    updateTabCounts()
-    showToast(`"${area.name}"已通过审核`)
   }
   
   const showRejectModal = (area) => {
@@ -557,27 +539,29 @@
     rejectingArea.value = null
   }
   
-  const confirmReject = () => {
+  const confirmReject = async () => {
     if (!rejectReason.value.trim()) {
-      uni.showToast({
-        title: '请输入拒绝理由',
-        icon: 'none'
-      })
+      uni.showToast({ title: '请输入拒绝理由', icon: 'none' })
       return
     }
-  
-    // 从待审核列表中移除
-    const index = pendingAreas.value.findIndex(p => p.id === rejectingArea.value.id)
-    if (index > -1) {
-      pendingAreas.value.splice(index, 1)
+
+    try {
+      // NOTE: ResearchAreaReviewDTO 结构待后端确认（blocker ①），当前使用 { action: 'rejected', reason }
+      const res = await reviewResearchArea(rejectingArea.value.id, {
+        action: 'rejected',
+        reason: rejectReason.value.trim()
+      })
+      if (res && res.code === 200) {
+        await loadPendingAreas()
+        updateTabCounts()
+        showToast(`已拒绝"${rejectingArea.value.name}"的申请`)
+        hideRejectModal()
+      } else {
+        uni.showToast({ title: res?.msg || '操作失败', icon: 'none' })
+      }
+    } catch (e) {
+      uni.showToast({ title: '操作失败', icon: 'none' })
     }
-    
-    // 这里可以发送拒绝通知给申请人
-    console.log('拒绝理由:', rejectReason.value)
-    
-    updateTabCounts()
-    showToast(`已拒绝"${rejectingArea.value.name}"的申请`)
-    hideRejectModal()
   }
   
   const showToast = (message) => {

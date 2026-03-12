@@ -3,6 +3,17 @@ import { request } from '../../utils/request.js';
 // 获取本地存储的 token
 const getToken = () => uni.getStorageSync('token') || '';
 
+const getWsUrl = (token) => {
+  // #ifdef H5
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${wsProtocol}://${window.location.host}/ws?token=${token}`;
+  // #endif
+
+  // #ifndef H5
+  return `ws://localhost:8080/ws?token=${token}`;
+  // #endif
+};
+
 // ===================== 1. 时间配置管理接口 =====================
 
 /**
@@ -12,7 +23,7 @@ const getToken = () => uni.getStorageSync('token') || '';
  */
 export const fetchTimeConfig = (year = new Date().getFullYear().toString()) => {
   return request({
-    url: `/teacher/time-config?year=${year}`,
+    url: `/api/teacher/time-config?year=${year}`,
     method: 'GET'
   });
 };
@@ -26,7 +37,7 @@ export const fetchTimeConfig = (year = new Date().getFullYear().toString()) => {
  */
 export const fetchUserTimeSelection = (academicYear = '2026') => {
   return request({
-    url: `/teacher/user/time-selection?academicYear=${academicYear}`,
+    url: `/api/teacher/user/time-selection?academicYear=${academicYear}`,
     method: 'GET'
   });
 };
@@ -39,7 +50,7 @@ export const fetchUserTimeSelection = (academicYear = '2026') => {
  */
 export const saveTimeSelection = (selectedSlots, academicYear = '2026') => {
   return request({
-    url: `/teacher/user/time-selection?academicYear=${academicYear}`,
+    url: `/api/teacher/user/time-selection?academicYear=${academicYear}`,
     method: 'POST',
     data: { selectedSlots }
   });
@@ -53,7 +64,7 @@ export const saveTimeSelection = (selectedSlots, academicYear = '2026') => {
  */
 export const confirmTimeSelection = (academicYear = '2026', slotIds = []) => {
   return request({
-    url: '/teacher/user/time-selection-confirm',
+    url: '/api/teacher/user/time-selection-confirm',
     method: 'POST',
     data: { academicYear, slotIds }
   });
@@ -65,7 +76,7 @@ export const confirmTimeSelection = (academicYear = '2026', slotIds = []) => {
  */
 export const fetchDeadline = () => {
   return request({
-    url: '/teacher/deadline',
+    url: '/api/teacher/deadline',
     method: 'GET'
   });
 };
@@ -78,7 +89,7 @@ export const fetchDeadline = () => {
  */
 export const fetchReviewTasks = () => {
   return request({
-    url: '/teacher/user/review-tasks',
+    url: '/api/teacher/user/review-tasks',
     method: 'GET'
   });
 };
@@ -92,7 +103,7 @@ export const fetchReviewTasks = () => {
  */
 export const updateTaskStatus = (taskId, status, notes = '') => {
   return request({
-    url: `/teacher/user/review-tasks/${taskId}/status`,
+    url: `/api/teacher/user/review-tasks/${taskId}/status`,
     method: 'PUT',
     data: { status, notes }
   });
@@ -109,7 +120,7 @@ export const updateTaskStatus = (taskId, status, notes = '') => {
  */
 export const fetchNotifications = (page = 1, limit = 5) => {
   return request({
-    url: `/teacher/user/notifications?page=${page}&limit=${limit}`,
+    url: `/api/teacher/user/notifications?page=${page}&limit=${limit}`,
     method: 'GET'
   });
 };
@@ -121,7 +132,7 @@ export const fetchNotifications = (page = 1, limit = 5) => {
  */
 export const markNotificationAsRead = (notificationId) => {
   return request({
-    url: `/teacher/user/notifications/${notificationId}/read`,
+    url: `/api/teacher/user/notifications/${notificationId}/read`,
     method: 'PUT'
   });
 };
@@ -132,7 +143,7 @@ export const markNotificationAsRead = (notificationId) => {
  */
 export const markAllNotificationsAsRead = () => {
   return request({
-    url: '/teacher/user/notifications/mark-all-read',
+    url: '/api/teacher/user/notifications/mark-all-read',
     method: 'PUT'
   });
 };
@@ -143,7 +154,7 @@ export const markAllNotificationsAsRead = () => {
  */
 export const checkNewNotifications = () => {
   return request({
-    url: '/teacher/user/notifications/check',
+    url: '/api/teacher/user/notifications/check',
     method: 'GET'
   });
 };
@@ -156,7 +167,7 @@ export const checkNewNotifications = () => {
  */
 export const fetchTeacherProfile = () => {
   return request({
-    url: '/teacher/profile',
+    url: '/api/teacher/profile',
     method: 'GET'
   });
 };
@@ -169,7 +180,7 @@ export const fetchTeacherProfile = () => {
  */
 export const fetchTeacherResearchAreas = () => {
   return request({
-    url: '/teacher/research-areas',
+    url: '/api/teacher/research-areas',
     method: 'GET'
   });
 };
@@ -181,7 +192,7 @@ export const fetchTeacherResearchAreas = () => {
  */
 export const addResearchArea = (name) => {
   return request({
-    url: '/teacher/research-areas',
+    url: '/api/teacher/research-areas',
     method: 'POST',
     data: { name }
   });
@@ -194,7 +205,7 @@ export const addResearchArea = (name) => {
  */
 export const deleteResearchArea = (areaId) => {
   return request({
-    url: `/teacher/research-areas/${areaId}`,
+    url: `/api/teacher/research-areas/${areaId}`,
     method: 'DELETE'
   });
 };
@@ -205,7 +216,7 @@ export const deleteResearchArea = (areaId) => {
  */
 export const fetchResearchDirections = () => {
   return request({
-    url: '/teacher/research-areas',
+    url: '/api/teacher/research-areas',
     method: 'GET'
   });
 };
@@ -218,7 +229,7 @@ export const fetchResearchDirections = () => {
  */
 export const fetchResearchConfirmation = () => {
   return request({
-    url: '/teacher/research-directions',
+    url: '/api/teacher/research-directions',
     method: 'GET'
   });
 };
@@ -230,7 +241,7 @@ export const fetchResearchConfirmation = () => {
  */
 export const saveResearchConfirmation = (researchAreaIds) => {
   return request({
-    url: '/teacher/research-areas',
+    url: '/api/teacher/research-areas',
     method: 'PUT',
     data: { researchAreaIds }
   });
@@ -247,7 +258,7 @@ export const saveResearchConfirmation = (researchAreaIds) => {
  */
 export const applyCustomResearchDirection = (data) => {
   return request({
-    url: '/teacher/custom-research-direction',
+    url: '/api/teacher/custom-research-direction',
     method: 'POST',
     data: data
   });
@@ -277,7 +288,7 @@ export const confirmationAPI = {
  */
 export const updatePassword = (passwordData) => {
   return request({
-    url: '/teacher/user/password',
+    url: '/api/teacher/user/password',
     method: 'PUT',
     data: passwordData
   });
@@ -291,7 +302,7 @@ export const updatePassword = (passwordData) => {
  */
 export const logoutUser = () => {
   return request({
-    url: '/auth/logout',
+    url: '/api/auth/logout',
     method: 'POST'
   });
 };
@@ -303,7 +314,7 @@ export const logoutUser = () => {
  */
 export const refreshToken = (refreshToken) => {
   return request({
-    url: '/auth/refresh',
+    url: '/api/auth/refresh',
     method: 'POST',
     data: { refreshToken }
   });
@@ -341,7 +352,7 @@ export const wsManager = {
     try {
       // 使用全局事件监听 API，兼容 H5 / 小程序 / App 全平台
       uni.connectSocket({
-        url: `ws://localhost:8080/ws?token=${wsToken}`,
+        url: getWsUrl(wsToken),
         header: {
           'Authorization': `Bearer ${wsToken}`
         }

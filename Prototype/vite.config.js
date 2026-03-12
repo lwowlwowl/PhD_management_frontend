@@ -11,14 +11,18 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:8080',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        changeOrigin: true
       },
-	  '/teacher': {
-	          target: 'http://localhost:8080',
-	          changeOrigin: true,
-	          // No rewrite needed if the backend expects /teacher
-	        }
+    '/teacher': {
+            target: 'http://localhost:8080',
+            changeOrigin: true,
+            // No rewrite needed if the backend expects /teacher
+          },
+    '/ws': {
+            target: 'ws://localhost:8080',
+            changeOrigin: true,
+            ws: true
+          }
     }
   }
 })

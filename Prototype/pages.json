@@ -135,23 +135,6 @@
 			}
 		},
 		{
-			"path" : "pages/admin/dashboard/teacher-list",
-			"style" : 
-			{
-				"navigationBarTitleText" : "本次参与老师",
-				"navigationStyle": "custom"
-			}
-		},
-		{
-			"path" : "pages/admin/dashboard/phd-list",
-			"style" : 
-			{
-				"navigationBarTitleText" : "本次参与博士生",
-				"navigationStyle": "custom"
-			}
-		},
-
-		{
 			"path" : "pages/admin/schedule/schedule-generation",
 			"style" : 
 			{

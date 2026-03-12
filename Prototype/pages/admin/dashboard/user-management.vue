@@ -50,11 +50,23 @@
       <!-- 列表头部统计 -->
       <view class="list-header">
         <text class="list-stats">共 {{ filteredUsers.length }} 位{{ getCurrentUserTypeLabel() }}</text>
-        <view v-if="selectedUsers.length > 0" class="batch-actions">
+        <view v-if="isParticipationEditMode" class="batch-actions">
+          <text class="selected-count">编辑参与中</text>
+          <view class="participation-save-btn" @click="saveParticipation">
+            <text class="batch-delete-text">保存</text>
+          </view>
+          <view class="participation-cancel-btn" @click="cancelParticipationEdit">
+            <text class="batch-delete-text">取消</text>
+          </view>
+        </view>
+        <view v-else-if="selectedUsers.length > 0" class="batch-actions">
           <text class="selected-count">已选择 {{ selectedUsers.length }} 项</text>
           <view class="batch-delete-button" @click="showBatchDeleteConfirm">
             <text class="batch-delete-text">批量删除</text>
           </view>
+        </view>
+        <view v-else class="edit-participation-btn" @click="enterParticipationEditMode">
+          <text class="edit-participation-text">编辑参与</text>
         </view>
       </view>
 
@@ -94,8 +106,23 @@
             <text class="status-text">{{ getStatusText(user.status) }}</text>
           </view>
 
+          <!-- 参与状态 -->
+          <view class="participation-status">
+            <view v-if="isParticipationEditMode">
+              <view
+                :class="['participation-checkbox', { 'checked': localParticipation[user.id] }]"
+                @click="toggleUserParticipation(user)"
+              >
+                <text v-if="localParticipation[user.id]" class="check-mark">✓</text>
+              </view>
+            </view>
+            <view v-else :class="['participation-badge', user.isParticipating ? 'participating' : 'not-participating']">
+              <text class="participation-badge-text">{{ user.isParticipating ? '参与' : '不参与' }}</text>
+            </view>
+          </view>
+
           <!-- 操作按钮 -->
-          <view v-if="!isMultiSelectMode" class="user-actions">
+          <view v-if="!isMultiSelectMode && !isParticipationEditMode" class="user-actions">
             <view class="action-button edit" @click="editUser(user)">
               <text class="action-icon">✏️</text>
             </view>
@@ -127,7 +154,7 @@
           </view>
         </view>
         
-        <scroll-view class="modal-body" scroll-y="true">
+        <scroll-view class="modal-body form-modal-body" scroll-y="true">
           <view class="form-group">
             <text class="form-label">姓名</text>
             <input v-model="newUser.name" class="form-input" placeholder="请输入姓名" />
@@ -156,7 +183,7 @@
             <text class="form-label">主导师</text>
             <picker :range="availableTeachers" range-key="name" @change="onSupervisorChange">
               <view class="picker">
-                <text class="picker-text">{{ newUser.supervisor || '请选择主导师' }}</text>
+                <text class="picker-text">{{ getSupervisorDisplayName(newUser.supervisor) || '请选择主导师' }}</text>
               </view>
             </picker>
           </view>
@@ -232,7 +259,7 @@
             <text class="close-text">✕</text>
           </view>
         </view>
-        <scroll-view class="modal-body" scroll-y="true">
+        <scroll-view class="modal-body form-modal-body" scroll-y="true">
           <view class="form-group">
             <text class="form-label">姓名</text>
             <input v-model="editUserForm.name" class="form-input" placeholder="请输入姓名" />
@@ -255,9 +282,9 @@
           </view>
           <view v-if="currentUserType === 'phd'" class="form-group">
             <text class="form-label">主导师</text>
-            <picker :range="availableTeachers" range-key="name" @change="e => editUserForm.supervisor = availableTeachers[e.detail.value].name">
+            <picker :range="availableTeachers" range-key="name" @change="e => { const t = availableTeachers[e.detail.value]; editUserForm.supervisor = formatTeacherId(t.teacherId) || t.name }">
               <view class="picker">
-                <text class="picker-text">{{ editUserForm.supervisor || '请选择主导师' }}</text>
+                <text class="picker-text">{{ getSupervisorDisplayName(editUserForm.supervisor) || '请选择主导师' }}</text>
               </view>
             </picker>
           </view>
@@ -303,6 +330,17 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import {
+  fetchUsers,
+  addUser,
+  updateUser,
+  deleteUser,
+  fetchResearchAreas,
+  mapUserRecord,
+  uploadStudents,
+  uploadTeachers,
+  updateParticipation
+} from '../admin_API.js'
 
 // 响应式数据
 const currentUserType = ref('phd') // phd, teacher
@@ -325,6 +363,12 @@ const newUser = ref({
 })
 
 const editingUser = ref(null)
+
+// 参与评审编辑相关
+const isParticipationEditMode = ref(false)
+const localParticipation = ref({})    // { [userId]: boolean }
+const originalParticipation = ref({}) // { [userId]: boolean }
+
 const editUserForm = ref({
   name: '',
   id: '',
@@ -340,114 +384,72 @@ const userTypes = ref([
   { key: 'teacher', label: '老师' }
 ])
 
-const availableTeachers = ref([
-  { id: 'T001', name: '王伟教授' },
-  { id: 'T002', name: '李静教授' },
-  { id: 'T003', name: '陈华教授' }
-])
+const availableTeachers = ref([])
+const researchAreaOptions = ref([])
 
-const researchAreaOptions = ref([
-  '人工智能',
-  '机器学习',
-  '自然语言处理',
-  '计算机视觉',
-  '深度学习',
-  '数据挖掘',
-  '信息检索',
-  '图像处理'
-])
+// 用户列表（替代原来的 phdStudents / teachers 两个独立数组）
+const users = ref([])
 
-const phdStudents = ref([
-  {
-    id: 'PhD001',
-    name: '李明',
-    studentId: 'PhD2021001',
-    email: 'liming@university.edu.cn',
-    enrollmentDate: '2021-09-01',
-    supervisor: '王伟教授',
-    researchAreas: ['人工智能', '机器学习'],
-    status: 'active'
-  },
-  {
-    id: 'PhD002',
-    name: '张小雨',
-    studentId: 'PhD2021002',
-    email: 'zhangxy@university.edu.cn',
-    enrollmentDate: '2021-09-01',
-    supervisor: '李静教授',
-    researchAreas: ['计算机视觉', '深度学习'],
-    status: 'active'
-  },
-  {
-    id: 'PhD003',
-    name: '陈思远',
-    studentId: 'PhD2020003',
-    email: 'chensiyuan@university.edu.cn',
-    enrollmentDate: '2020-09-01',
-    supervisor: '陈华教授',
-    researchAreas: ['自然语言处理'],
-    status: 'inactive'
+// NOTE: 搜索已在服务端完成，filteredUsers 直接返回 users
+const filteredUsers = computed(() => users.value)
+
+const loadUsers = async () => {
+  try {
+    const res = await fetchUsers(searchKeyword.value, currentUserType.value, 1, 100)
+    if (res && res.code === 200 && res.data) {
+      const records = res.data.list || []
+      users.value = Array.isArray(records)
+        ? records.map(r => mapUserRecord(r, currentUserType.value))
+        : []
+    }
+  } catch (e) {
+    console.error('加载用户列表失败', e)
   }
-])
+}
 
-const teachers = ref([
-  {
-    id: 'T001',
-    name: '王伟',
-    employeeId: 'T2020001',
-    email: 'wangwei@university.edu.cn',
-    title: '教授',
-    department: '计算机科学与技术学院',
-    researchAreas: ['人工智能', '机器学习', '数据挖掘'],
-    status: 'active'
-  },
-  {
-    id: 'T002',
-    name: '李静',
-    employeeId: 'T2019002',
-    email: 'lijing@university.edu.cn',
-    title: '教授',
-    department: '计算机科学与技术学院',
-    researchAreas: ['计算机视觉', '图像处理'],
-    status: 'active'
-  },
-  {
-    id: 'T003',
-    name: '陈华',
-    employeeId: 'T2021003',
-    email: 'chenhua@university.edu.cn',
-    title: '副教授',
-    department: '计算机科学与技术学院',
-    researchAreas: ['自然语言处理', '信息检索'],
-    status: 'active'
+const loadResearchAreaOptions = async () => {
+  try {
+    const res = await fetchResearchAreas('', 1, 100)
+    if (res && res.code === 200 && res.data) {
+      const records = res.data.list || []
+      researchAreaOptions.value = Array.isArray(records) ? records.map(r => r.name) : []
+    }
+  } catch (e) {
+    console.error('加载研究方向失败', e)
   }
-])
+}
 
-// 计算属性
-const currentUsers = computed(() => {
-  return currentUserType.value === 'phd' ? phdStudents.value : teachers.value
-})
-
-const filteredUsers = computed(() => {
-  if (!searchKeyword.value.trim()) {
-    return currentUsers.value
+const loadAvailableTeachers = async () => {
+  try {
+    const res = await fetchUsers('', 'teacher', 1, 100)
+    if (res && res.code === 200 && res.data) {
+      const records = res.data.list || []
+      availableTeachers.value = Array.isArray(records)
+        ? records.map(r => ({ id: r.id, name: r.name || '', teacherId: r.teacherId || null }))
+        : []
+    }
+  } catch (e) {
+    console.error('加载导师列表失败', e)
   }
-  
-  const keyword = searchKeyword.value.toLowerCase()
-  return currentUsers.value.filter(user => {
-    const searchFields = [
-      user.name,
-      currentUserType.value === 'phd' ? user.studentId : user.employeeId,
-      user.email
-    ]
-    return searchFields.some(field => 
-      field && field.toLowerCase().includes(keyword)
-    )
-  })
-})
+}
 
-onMounted(() => {
-  console.log('用户管理页面已加载')
+// 将 teacherId 格式化为 "T001" 格式
+const formatTeacherId = (teacherId) => {
+  if (!teacherId) return ''
+  return 'T' + String(parseInt(teacherId)).padStart(3, '0')
+}
+
+// 根据 "T001" 格式 ID 查找导师显示名称
+const getSupervisorDisplayName = (supervisorId) => {
+  if (!supervisorId) return ''
+  const teacher = availableTeachers.value.find(t =>
+    t.teacherId && formatTeacherId(t.teacherId) === supervisorId
+  )
+  return teacher ? teacher.name : supervisorId
+}
+
+onMounted(async () => {
+  await Promise.all([loadUsers(), loadResearchAreaOptions(), loadAvailableTeachers()])
 })
 
 // 方法定义
@@ -456,26 +458,40 @@ const switchUserType = (type) => {
   searchKeyword.value = ''
   selectedUsers.value = []
   isMultiSelectMode.value = false
+  loadUsers()
 }
 
 const getCurrentUserTypeLabel = () => {
   return currentUserType.value === 'phd' ? '博士生' : '老师'
 }
 
+let _searchTimer = null
 const handleSearch = () => {
-  // 搜索逻辑已在计算属性中实现
+  clearTimeout(_searchTimer)
+  _searchTimer = setTimeout(() => loadUsers(), 300)
 }
 
 const handleImportExcel = () => {
   uni.chooseFile({
     count: 1,
     extension: ['.xlsx', '.xls'],
-    success: (res) => {
-      console.log('选择的文件:', res.tempFiles[0])
-      uni.showToast({
-        title: '文件导入功能开发中',
-        icon: 'none'
-      })
+    success: async (res) => {
+      const filePath = res.tempFiles[0].path || res.tempFiles[0]
+      uni.showLoading({ title: '导入中...', mask: true })
+      try {
+        const uploadFn = currentUserType.value === 'phd' ? uploadStudents : uploadTeachers
+        const data = await uploadFn(filePath)
+        uni.hideLoading()
+        if (data && data.code === 200) {
+          uni.showToast({ title: data.msg || '导入成功', icon: 'success' })
+          await loadUsers()
+        } else {
+          uni.showToast({ title: data?.msg || '导入失败', icon: 'none' })
+        }
+      } catch (e) {
+        uni.hideLoading()
+        uni.showToast({ title: '导入失败', icon: 'none' })
+      }
     }
   })
 }
@@ -537,7 +553,8 @@ const onEnrollmentDateChange = (e) => {
 
 const onSupervisorChange = (e) => {
   const index = e.detail.value
-  newUser.value.supervisor = availableTeachers.value[index].name
+  const teacher = availableTeachers.value[index]
+  newUser.value.supervisor = formatTeacherId(teacher.teacherId) || teacher.name
 }
 
 const toggleResearchArea = (area) => {
@@ -549,41 +566,41 @@ const toggleResearchArea = (area) => {
   }
 }
 
-const confirmAddUser = () => {
+const confirmAddUser = async () => {
   if (!newUser.value.name || !newUser.value.id || !newUser.value.email) {
-    uni.showToast({
-      title: '请填写完整信息',
-      icon: 'none'
-    })
+    uni.showToast({ title: '请填写完整信息', icon: 'none' })
     return
   }
-  
-  const user = {
-    id: Date.now().toString(),
+
+  // 构建 UserAddDTO
+  // NOTE: 字段名称以后端 UserAddDTO 为准（blocker ②）
+  const dto = {
+    type: currentUserType.value,
     name: newUser.value.name,
     email: newUser.value.email,
-    status: 'active',
     researchAreas: newUser.value.researchAreas || []
   }
-  
   if (currentUserType.value === 'phd') {
-    user.studentId = newUser.value.id
-    user.enrollmentDate = newUser.value.enrollmentDate
-    user.supervisor = newUser.value.supervisor
-    phdStudents.value.unshift(user)
+    dto.studentId = newUser.value.id
+    dto.enrollmentDate = newUser.value.enrollmentDate || null
+    dto.mainSupervisor = newUser.value.supervisor || ''
+    dto.supervisors = newUser.value.supervisor ? [newUser.value.supervisor] : []
   } else {
-    user.employeeId = newUser.value.id
-    user.title = newUser.value.title
-    user.department = '计算机科学与技术学院'
-    user.researchAreas = newUser.value.researchAreas || []
-    teachers.value.unshift(user)
+    dto.employeeId = newUser.value.id
   }
-  
-  hideAddModal()
-  uni.showToast({
-    title: '添加成功',
-    icon: 'success'
-  })
+
+  try {
+    const res = await addUser(dto)
+    if (res && res.code === 200) {
+      await loadUsers()
+      hideAddModal()
+      uni.showToast({ title: '添加成功', icon: 'success' })
+    } else {
+      uni.showToast({ title: res?.msg || '添加失败', icon: 'none' })
+    }
+  } catch (e) {
+    uni.showToast({ title: '添加失败', icon: 'none' })
+  }
 }
 
 const editUser = (user) => {
@@ -615,32 +632,40 @@ const toggleEditResearchArea = (area) => {
   }
 }
 
-const confirmEditUser = () => {
+const confirmEditUser = async () => {
   if (!editUserForm.value.name || !editUserForm.value.id || !editUserForm.value.email) {
-    uni.showToast({
-      title: '请填写完整信息',
-      icon: 'none'
-    })
+    uni.showToast({ title: '请填写完整信息', icon: 'none' })
     return
   }
-  // 同步修改到原有用户对象
-  editingUser.value.name = editUserForm.value.name
-  editingUser.value.email = editUserForm.value.email
-  editingUser.value.researchAreas = [...editUserForm.value.researchAreas]
-  if (currentUserType.value === 'phd') {
-    editingUser.value.studentId = editUserForm.value.id
-    editingUser.value.enrollmentDate = editUserForm.value.enrollmentDate
-    editingUser.value.supervisor = editUserForm.value.supervisor
-  } else {
-    editingUser.value.employeeId = editUserForm.value.id
-    editingUser.value.title = editUserForm.value.title
-    editingUser.value.researchAreas = [...editUserForm.value.researchAreas]
+
+  // 构建 UserAddDTO（同 confirmAddUser）
+  const dto = {
+    type: currentUserType.value,
+    name: editUserForm.value.name,
+    email: editUserForm.value.email,
+    researchAreas: editUserForm.value.researchAreas || []
   }
-  hideEditModal()
-  uni.showToast({
-    title: '保存成功',
-    icon: 'success'
-  })
+  if (currentUserType.value === 'phd') {
+    dto.studentId = editUserForm.value.id
+    dto.enrollmentDate = editUserForm.value.enrollmentDate || null
+    dto.mainSupervisor = editUserForm.value.supervisor || ''
+    dto.supervisors = editUserForm.value.supervisor ? [editUserForm.value.supervisor] : []
+  } else {
+    dto.employeeId = editUserForm.value.id
+  }
+
+  try {
+    const res = await updateUser(editingUser.value.id, dto)
+    if (res && res.code === 200) {
+      await loadUsers()
+      hideEditModal()
+      uni.showToast({ title: '保存成功', icon: 'success' })
+    } else {
+      uni.showToast({ title: res?.msg || '保存失败', icon: 'none' })
+    }
+  } catch (e) {
+    uni.showToast({ title: '保存失败', icon: 'none' })
+  }
 }
 
 const showDeleteConfirm = (user) => {
@@ -658,32 +683,72 @@ const hideDeleteModal = () => {
   deletingUser.value = null
 }
 
-const confirmDelete = () => {
-  if (deletingUser.value) {
-    // 删除单个用户
-    const users = currentUserType.value === 'phd' ? phdStudents.value : teachers.value
-    const index = users.findIndex(u => u.id === deletingUser.value.id)
-    if (index > -1) {
-      users.splice(index, 1)
-    }
-  } else {
-    // 批量删除
-    const users = currentUserType.value === 'phd' ? phdStudents.value : teachers.value
-    selectedUsers.value.forEach(selectedUser => {
-      const index = users.findIndex(u => u.id === selectedUser.id)
-      if (index > -1) {
-        users.splice(index, 1)
+const confirmDelete = async () => {
+  try {
+    if (deletingUser.value) {
+      // 删除单个用户
+      const res = await deleteUser(deletingUser.value.id)
+      if (res && res.code === 200) {
+        await loadUsers()
+        hideDeleteModal()
+        uni.showToast({ title: '删除成功', icon: 'success' })
+      } else {
+        uni.showToast({ title: res?.msg || '删除失败', icon: 'none' })
       }
-    })
-    selectedUsers.value = []
-    isMultiSelectMode.value = false
+    } else {
+      // 批量删除
+      await Promise.all(selectedUsers.value.map(u => deleteUser(u.id)))
+      selectedUsers.value = []
+      isMultiSelectMode.value = false
+      await loadUsers()
+      hideDeleteModal()
+      uni.showToast({ title: '删除成功', icon: 'success' })
+    }
+  } catch (e) {
+    uni.showToast({ title: '删除失败', icon: 'none' })
   }
-  
-  hideDeleteModal()
-  uni.showToast({
-    title: '删除成功',
-    icon: 'success'
+}
+
+const enterParticipationEditMode = () => {
+  const orig = {}
+  const local = {}
+  users.value.forEach(u => {
+    orig[u.id] = u.isParticipating
+    local[u.id] = u.isParticipating
   })
+  originalParticipation.value = orig
+  localParticipation.value = local
+  isParticipationEditMode.value = true
+}
+
+const cancelParticipationEdit = () => {
+  isParticipationEditMode.value = false
+  localParticipation.value = {}
+  originalParticipation.value = {}
+}
+
+const toggleUserParticipation = (user) => {
+  localParticipation.value[user.id] = !localParticipation.value[user.id]
+}
+
+const saveParticipation = async () => {
+  const changed = Object.entries(localParticipation.value).filter(
+    ([uid, val]) => val !== originalParticipation.value[uid]
+  )
+  if (changed.length === 0) {
+    isParticipationEditMode.value = false
+    return
+  }
+  try {
+    await Promise.all(changed.map(([uid, val]) => updateParticipation(uid, val)))
+    await loadUsers()
+    isParticipationEditMode.value = false
+    localParticipation.value = {}
+    originalParticipation.value = {}
+    uni.showToast({ title: '保存成功', icon: 'success' })
+  } catch (e) {
+    uni.showToast({ title: '保存失败', icon: 'none' })
+  }
 }
 
 const goBackDashboard = () => {
@@ -1194,10 +1259,15 @@ const goBackDashboard = () => {
 }
 
 .modal-body {
-  flex: 1;
   padding: 24rpx 20rpx 24rpx 20rpx;
   text-align: center;
   box-sizing: border-box;
+}
+
+.form-modal-body {
+  flex: 1;
+  height: 56vh;
+  min-height: 0;
 }
 
 .modal-message {
@@ -1258,6 +1328,10 @@ const goBackDashboard = () => {
 .modal-actions {
   border-top: 1rpx solid #e5e5e7;
   display: flex;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+  background: white;
 }
 
 .modal-button {
@@ -1304,6 +1378,7 @@ const goBackDashboard = () => {
   flex-wrap: wrap;
   gap: 12rpx;
   margin-top: 8rpx;
+  padding-bottom: 32rpx;
 }
 
 .research-area-tag {
@@ -1321,5 +1396,78 @@ const goBackDashboard = () => {
   background: linear-gradient(135deg, #007AFF, #5856D6);
   color: #fff;
   border-color: #007AFF;
+}
+
+.edit-participation-btn {
+  background: linear-gradient(135deg, #FF9500, #FF6B00);
+  border-radius: 12rpx;
+  padding: 8rpx 16rpx;
+}
+
+.edit-participation-text {
+  font-size: 22rpx;
+  color: white;
+  font-weight: 500;
+}
+
+.participation-save-btn {
+  background: linear-gradient(135deg, #34C759, #30D158);
+  border-radius: 12rpx;
+  padding: 8rpx 16rpx;
+  margin-right: 8rpx;
+}
+
+.participation-cancel-btn {
+  background: #8E8E93;
+  border-radius: 12rpx;
+  padding: 8rpx 16rpx;
+}
+
+.participation-status {
+  display: flex;
+  align-items: center;
+  margin-right: 12rpx;
+}
+
+.participation-badge {
+  border-radius: 12rpx;
+  padding: 4rpx 12rpx;
+}
+
+.participation-badge.participating {
+  background: #E8F8ED;
+}
+
+.participation-badge.not-participating {
+  background: #F2F2F7;
+}
+
+.participation-badge-text {
+  font-size: 20rpx;
+  font-weight: 500;
+}
+
+.participation-badge.participating .participation-badge-text {
+  color: #34C759;
+}
+
+.participation-badge.not-participating .participation-badge-text {
+  color: #8E8E93;
+}
+
+.participation-checkbox {
+  width: 44rpx;
+  height: 44rpx;
+  border: 2rpx solid #C7C7CC;
+  border-radius: 8rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.participation-checkbox.checked {
+  background: linear-gradient(135deg, #34C759, #30D158);
+  border-color: #34C759;
 }
 </style>

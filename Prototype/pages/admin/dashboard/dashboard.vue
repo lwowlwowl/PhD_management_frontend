@@ -288,30 +288,48 @@
 
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
+import {
+  fetchDashboardStats,
+  fetchDateConfigs,
+  updateDateConfigs,
+  slotsToScheduleList,
+  scheduleListToSlots
+} from '../admin_API.js'
 
 const activeTab = ref('overview')
-const pendingApprovals = ref(3)
+const pendingApprovals = ref(0)
+const academicYear = ref('2026')
 
 // 配置项数据
-const scheduleList = ref([
-  {
-    id: 1,
-    date: '2025-06-27',
-    morning: '09:00-12:00',
-    afternoon: '14:00-17:00'
-  },
-  {
-    id: 2,
-    date: '2025-06-28',
-    morning: '09:00-12:00',
-    afternoon: '14:00-17:00'
-  }
-])
+const scheduleList = ref([])
 const workloadValue = ref('8')
 const durationValue = ref('45')
-const teacherCount = ref(12)
-const participantCount = ref(25)
+const teacherCount = ref(0)
+const participantCount = ref(0)
+
+onMounted(async () => {
+  // 加载统计数据
+  try {
+    const statsRes = await fetchDashboardStats()
+    if (statsRes && statsRes.code === 200 && statsRes.data) {
+      teacherCount.value = statsRes.data.confirmedTeachers || 0
+      participantCount.value = statsRes.data.participatingPhds || 0
+      pendingApprovals.value = statsRes.data.pendingResearchAreaApprovals || 0
+    }
+  } catch (e) {
+    console.error('加载统计数据失败', e)
+  }
+  // 加载时间段配置
+  try {
+    const configRes = await fetchDateConfigs()
+    if (configRes && configRes.code === 200 && configRes.data) {
+      scheduleList.value = slotsToScheduleList(configRes.data)
+    }
+  } catch (e) {
+    console.error('加载日程配置失败', e)
+  }
+})
 
 // 编辑弹窗相关
 const showEditModal = ref(false)
@@ -490,6 +508,7 @@ const confirmEdit = () => {
   }
   
   // 根据编辑类型更新对应的值
+  // NOTE: workload/duration 暂无后端接口，仅本地保存（blocker ③）
   switch(currentEditType.value) {
     case 'workload':
       workloadValue.value = editValue.value.trim()
@@ -498,9 +517,9 @@ const confirmEdit = () => {
       durationValue.value = editValue.value.trim()
       break
   }
-  
+
   uni.showToast({
-    title: '设置成功',
+    title: '设置成功（仅本地）',
     icon: 'success'
   })
   
@@ -510,14 +529,14 @@ const confirmEdit = () => {
 // 查看参与人员
 const viewParticipants = () => {
   uni.navigateTo({
-    url: '/pages/admin/dashboard/phd-list'
+    url: '/pages/admin/dashboard/user-management'
   })
 }
 
 // 查看参与老师
 const viewTeachers = () => {
   uni.navigateTo({
-    url: '/pages/admin/dashboard/teacher-list'
+    url: '/pages/admin/dashboard/user-management'
   })
 }
 
@@ -587,6 +606,11 @@ const addSchedule = () => {
   newScheduleDate.value = ''
   newScheduleMorning.value = '09:00-12:00'
   newScheduleAfternoon.value = '14:00-17:00'
+  // 持久化到后端
+  const payload = scheduleListToSlots(scheduleList.value, academicYear.value)
+  updateDateConfigs(payload.academicYear, payload.slots).catch(e => {
+    console.error('保存日程失败', e)
+  })
   uni.showToast({
     title: '添加成功',
     icon: 'success'
@@ -595,6 +619,11 @@ const addSchedule = () => {
 
 const deleteSchedule = (id) => {
   scheduleList.value = scheduleList.value.filter(item => item.id !== id)
+  // 持久化到后端
+  const payload = scheduleListToSlots(scheduleList.value, academicYear.value)
+  updateDateConfigs(payload.academicYear, payload.slots).catch(e => {
+    console.error('删除日程失败', e)
+  })
   uni.showToast({
     title: '删除成功',
     icon: 'success'

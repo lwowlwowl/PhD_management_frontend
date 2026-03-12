@@ -17,30 +17,7 @@
         <view class="stat-number">{{ pendingCount }}</view>
         <view class="stat-label">待审批</view>
       </view>
-      <view class="stat-divider"></view>
-      <view class="stat-item">
-        <view class="stat-number">{{ historyCount }}</view>
-        <view class="stat-label">历史记录</view>
-      </view>
     </view>
-
-    <!-- 筛选标签 -->
-    <!-- <view class="filter-tabs">
-      <view 
-        class="tab-item" 
-        :class="{ active: activeTab === 'pending' }"
-        @click="switchTab('pending')"
-      >
-        待审批 ({{ pendingCount }})
-      </view>
-      <view 
-        class="tab-item" 
-        :class="{ active: activeTab === 'processed' }"
-        @click="switchTab('processed')"
-      >
-        已处理
-      </view>
-    </view> -->
 
     <!-- 申请列表 -->
     <view class="application-list">
@@ -95,17 +72,6 @@
               同意
             </button>
           </view>
-          
-          <!-- 已处理状态显示 -->
-          <view v-else class="processed-info">
-            <view class="process-result" :class="item.status">
-              {{ item.status === 'approved' ? '已同意' : '已拒绝' }}
-            </view>
-            <view class="process-time">{{ formatTime(item.processTime) }}</view>
-            <view v-if="item.processNote" class="process-note">
-              备注：{{ item.processNote }}
-            </view>
-          </view>
         </view>
         
         <!-- 右箭头 -->
@@ -117,7 +83,7 @@
       <!-- 空状态 -->
       <view v-if="currentList.length === 0" class="empty-state">
         <image class="empty-image" src="/static/images/empty-approval.png" mode="aspectFit"></image>
-        <text class="empty-text">{{ activeTab === 'pending' ? '暂无待审批申请' : '暂无处理记录' }}</text>
+        <text class="empty-text">暂无待审批申请</text>
       </view>
     </view>
 
@@ -129,32 +95,38 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+// TODO: No backend /admin/approvals endpoint. Currently mocked.
+// Research-area approvals are handled separately via researchArea-management.vue using reviewResearchArea().
+// When a dedicated approval endpoint is available, wire it here.
+import { ref, computed, onMounted } from 'vue'
+import { fetchPendingResearchAreas, reviewResearchArea } from '../admin_API.js'
 
-// 响应式数据
-const activeTab = ref('pending')
 const applicationList = ref([])
-const hasMore = ref(true)
+const hasMore = ref(false)
 const currentPage = ref(1)
 
 // 统计数量
-const pendingCount = computed(() => {
-  return applicationList.value.filter(item => item.status === 'pending').length
-})
-const historyCount = computed(() => {
-  return applicationList.value.filter(item => item.status !== 'pending').length
-})
+const pendingCount = computed(() => applicationList.value.length)
 
-// 计算属性
-const currentList = computed(() => {
-  return applicationList.value.filter(item => {
-    if (activeTab.value === 'pending') {
-      return item.status === 'pending'
-    } else {
-      return item.status !== 'pending'
-    }
-  })
-})
+// 只展示 pending 列表
+const currentList = computed(() => applicationList.value)
+
+// 将后端 PendingResearchAreaVO 映射到模板所需格式
+function mapPendingArea(r) {
+  return {
+    id: r.id,
+    teacherName: r.submitter || '未知提交人',
+    teacherId: '',
+    type: 'research_area',
+    reason: `申请添加研究方向：${r.name || ''}`,
+    areaName: r.name,
+    status: r.status || 'pending',
+    createTime: r.submitDate || new Date().toISOString(),
+    affectedStudents: [],
+    processTime: null,
+    processNote: ''
+  }
+}
 
 // 页面加载
 onMounted(() => {
@@ -166,54 +138,33 @@ const goBack = () => {
   uni.navigateBack()
 }
 
-const switchTab = (tab) => {
-  activeTab.value = tab
-  currentPage.value = 1
-  loadApplications()
-}
-
 const loadApplications = async () => {
   try {
     uni.showLoading({ title: '加载中...' })
-    
-    // 模拟API调用
-    const response = await mockApiCall('/api/admin/applications', {
-      page: currentPage.value,
-      status: activeTab.value === 'pending' ? 'pending' : 'processed'
-    })
-    
-    if (currentPage.value === 1) {
-      applicationList.value = response.data
-    } else {
-      applicationList.value.push(...response.data)
+    const res = await fetchPendingResearchAreas('')
+    if (res && res.code === 200 && res.data) {
+      const list = Array.isArray(res.data) ? res.data : []
+      applicationList.value = list.map(mapPendingArea)
     }
-    
-    hasMore.value = response.hasMore
     uni.hideLoading()
   } catch (error) {
     uni.hideLoading()
-    uni.showToast({
-      title: '加载失败',
-      icon: 'none'
-    })
+    uni.showToast({ title: '加载失败', icon: 'none' })
   }
 }
 
 const loadMore = () => {
-  currentPage.value++
-  loadApplications()
+  // no pagination for pending areas
 }
 
 const viewDetail = (item) => {
-  uni.navigateTo({
-    url: `/pages/admin/approval-detail?id=${item.id}`
-  })
+  // detail not yet implemented
 }
 
 const handleApprove = (item) => {
   uni.showModal({
     title: '确认操作',
-    content: `确定要同意 ${item.teacherName} 的变更申请吗？`,
+    content: `确定要通过「${item.areaName}」的研究方向申请吗？`,
     confirmText: '确定',
     cancelText: '取消',
     success: (res) => {
@@ -227,7 +178,7 @@ const handleApprove = (item) => {
 const handleReject = (item) => {
   uni.showModal({
     title: '确认操作',
-    content: `确定要拒绝 ${item.teacherName} 的变更申请吗？`,
+    content: `确定要拒绝「${item.areaName}」的研究方向申请吗？`,
     confirmText: '确定',
     cancelText: '取消',
     success: (res) => {
@@ -241,34 +192,24 @@ const handleReject = (item) => {
 const processApplication = async (item, action) => {
   try {
     uni.showLoading({ title: '处理中...' })
-    await mockApiCall('/api/admin/process-application', {
-      id: item.id,
-      action: action,
-      note: '' // 不再需要备注
-    })
-    // 更新本地数据
-    const index = applicationList.value.findIndex(app => app.id === item.id)
-    if (index !== -1) {
-      applicationList.value[index].status = action === 'approve' ? 'approved' : 'rejected'
-      applicationList.value[index].processTime = new Date().toISOString()
-      applicationList.value[index].processNote = ''
+    const res = await reviewResearchArea(item.id, { action, reason: '' })
+    if (res && res.code === 200) {
+      applicationList.value = applicationList.value.filter(app => app.id !== item.id)
+      uni.hideLoading()
+      uni.showToast({ title: action === 'approve' ? '已通过' : '已拒绝', icon: 'success' })
+    } else {
+      uni.hideLoading()
+      uni.showToast({ title: res?.msg || '处理失败', icon: 'none' })
     }
-    uni.hideLoading()
-    uni.showToast({
-      title: action === 'approve' ? '已同意' : '已拒绝',
-      icon: 'success'
-    })
   } catch (error) {
     uni.hideLoading()
-    uni.showToast({
-      title: '处理失败',
-      icon: 'none'
-    })
+    uni.showToast({ title: '处理失败', icon: 'none' })
   }
 }
 
 const getTypeText = (type) => {
   const typeMap = {
+    'research_area': '研究方向申请',
     'schedule_change': '时间变更',
     'room_change': '地点变更',
     'emergency_leave': '紧急请假',
@@ -278,11 +219,11 @@ const getTypeText = (type) => {
 }
 
 const formatTime = (timeString) => {
+  if (!timeString) return ''
   const date = new Date(timeString)
   const now = new Date()
   const diff = now - date
   const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-  
   if (days === 0) {
     const hours = Math.floor(diff / (1000 * 60 * 60))
     if (hours === 0) {
@@ -297,45 +238,6 @@ const formatTime = (timeString) => {
   } else {
     return date.toLocaleDateString()
   }
-}
-
-// 模拟API调用
-const mockApiCall = (url, params) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // 模拟数据
-      if (url.includes('applications')) {
-        resolve({
-          data: [
-            {
-              id: 1,
-              teacherName: '张教授',
-              teacherId: 'T001',
-              type: 'schedule_change',
-              reason: '临时有重要会议需要参加，希望调整评审时间',
-              status: 'pending',
-              createTime: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-              affectedStudents: ['李明', '王小红']
-            },
-            {
-              id: 2,
-              teacherName: '李副教授',
-              teacherId: 'T002',
-              type: 'emergency_leave',
-              reason: '家中紧急事务，无法按时参加评审',
-              status: params.status === 'pending' ? 'pending' : 'approved',
-              createTime: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-              processTime: params.status !== 'pending' ? new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString() : null,
-              affectedStudents: ['陈晓明']
-            }
-          ],
-          hasMore: false
-        })
-      } else {
-        resolve({ success: true })
-      }
-    }, 1000)
-  })
 }
 </script>
 
@@ -402,13 +304,6 @@ const mockApiCall = (url, params) => {
 .stat-label {
   font-size: 28rpx;
   color: #666;
-}
-
-.stat-divider {
-  width: 2rpx;
-  height: 60rpx;
-  background-color: #e5e5e5;
-  margin: 0 40rpx;
 }
 
 .application-list {
@@ -531,35 +426,6 @@ const mockApiCall = (url, params) => {
   background-color: #007aff;
   border-radius: 8rpx;
   font-size: 28rpx;
-}
-
-.processed-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.process-result {
-  font-size: 28rpx;
-  font-weight: 600;
-  
-  &.approved {
-    color: #34c759;
-  }
-  
-  &.rejected {
-    color: #ff3b30;
-  }
-}
-
-.process-time {
-  font-size: 24rpx;
-  color: #999;
-}
-
-.process-note {
-  font-size: 28rpx;
-  color: #666;
 }
 
 .arrow-right {
