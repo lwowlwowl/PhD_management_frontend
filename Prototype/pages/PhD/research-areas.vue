@@ -67,6 +67,7 @@ const selectedAreas = ref([])
 const availableAreas = ref([])
 
 // 通用的API响应处理函数
+// request.js 已返回 res.data（即 {code, data, message}），不再有 statusCode
 const handleApiResponse = (response, dataType) => {
   console.log(`${dataType} API原始返回:`, response);
   
@@ -74,38 +75,12 @@ const handleApiResponse = (response, dataType) => {
     throw new Error('API响应为空');
   }
   
-  // 检查HTTP状态
-  if (response.statusCode !== 200) {
-    let errorMessage = `HTTP状态错误: ${response.statusCode}`;
-    
-    // 对于400错误，尝试获取更详细的错误信息
-    if (response.statusCode === 400) {
-      if (response.data && response.data.message) {
-        errorMessage += ` - ${response.data.message}`;
-      } else {
-        errorMessage += ' - 请求参数错误，请检查数据格式';
-      }
-      console.error('400错误详情:', {
-        statusCode: response.statusCode,
-        data: response.data,
-        headers: response.header
-      });
-    }
-    
-    throw new Error(errorMessage);
-  }
-  
-  // 检查响应数据结构
-  if (!response.data) {
-    throw new Error('响应数据为空');
-  }
-  
   // 检查业务状态码
-  if (response.data.code !== 200) {
-    throw new Error(`业务错误: ${response.data.message || '未知错误'}`);
+  if (response.code !== 200) {
+    throw new Error(`业务错误: ${response.message || '未知错误'}`);
   }
   
-  return response.data.data;
+  return response.data;
 }
 
 // 检查登录状态

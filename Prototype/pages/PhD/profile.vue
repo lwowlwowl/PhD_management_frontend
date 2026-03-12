@@ -121,6 +121,7 @@ const userInfo = reactive({
 })
 
 // 通用的API响应处理函数
+// request.js 已返回 res.data（即 {code, data, message}），不再有 statusCode
 const handleApiResponse = (response, dataType) => {
   console.log(`${dataType} API原始返回:`, response);
   
@@ -128,22 +129,12 @@ const handleApiResponse = (response, dataType) => {
     throw new Error('API响应为空');
   }
   
-  // 检查HTTP状态
-  if (response.statusCode !== 200) {
-    throw new Error(`HTTP状态错误: ${response.statusCode}`);
-  }
-  
-  // 检查响应数据结构
-  if (!response.data) {
-    throw new Error('响应数据为空');
-  }
-  
   // 检查业务状态码
-  if (response.data.code !== 200) {
-    throw new Error(`业务错误: ${response.data.message || '未知错误'}`);
+  if (response.code !== 200) {
+    throw new Error(`业务错误: ${response.message || '未知错误'}`);
   }
   
-  return response.data.data;
+  return response.data;
 }
 
 // 检查登录状态
@@ -316,10 +307,10 @@ const switchTab = (tab) => {
 	currentTab.value = tab
 	switch(tab) {
 		case 'PhD':
-			uni.navigateTo({ url: '/pages/PhD/PhD' })
+			uni.reLaunch({ url: '/pages/PhD/PhD' })
 			break
 		case 'history':
-			uni.navigateTo({ url: '/pages/PhD/history' })
+			uni.reLaunch({ url: '/pages/PhD/history' })
 			break
 		case 'profile':
 			break

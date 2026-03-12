@@ -1,40 +1,7 @@
-// 假设 token 来自本地存储或全局状态
-const getToken = () => uni.getStorageSync('token') || '';
+import { request } from '../../utils/request.js';
 
-// 通用请求处理函数
-const request = (options) => {
-  return new Promise((resolve, reject) => {
-    console.log(`发起API请求: ${options.method} ${options.url}`);
-    uni.request({
-      ...options,
-      header: {
-        'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json;charset=UTF-8',
-        ...options.header
-      },
-      success: (res) => {
-        console.log(`API请求成功 [${options.method} ${options.url}]:`, res);
-        if (res.data.code === 200) {
-          resolve(res.data);
-        } else {
-          // 特殊处理401未授权
-          if (res.data.code === 401) {
-            uni.removeStorageSync('token');
-            uni.removeStorageSync('teacherInfo');
-            uni.reLaunch({
-              url: '/pages/login/login'
-            });
-          }
-          reject(new Error(res.data.message || '请求失败'));
-        }
-      },
-      fail: (err) => {
-        console.error(`API请求失败 [${options.method} ${options.url}]:`, err);
-        reject(err);
-      }
-    });
-  });
-};
+// 获取本地存储的 token
+const getToken = () => uni.getStorageSync('token') || '';
 
 // ===================== 1. 时间配置管理接口 =====================
 

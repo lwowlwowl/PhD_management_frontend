@@ -1,28 +1,4 @@
-// 假设 token 來自本地存储或全局状态
-const getToken = () => uni.getStorageSync('token') || '';
-
-// 通用请求处理函数
-const request = (options) => {
-  return new Promise((resolve, reject) => {
-    console.log(`发起API请求: ${options.method} ${options.url}`);
-    uni.request({
-      ...options,
-      header: {
-        'Authorization': `Bearer ${getToken()}`,
-        'Content-Type': 'application/json',
-        ...options.header
-      },
-      success: (res) => {
-        console.log(`API请求成功 [${options.method} ${options.url}]:`, res);
-        resolve(res);
-      },
-      fail: (err) => {
-        console.error(`API请求失败 [${options.method} ${options.url}]:`, err);
-        reject(err);
-      }
-    });
-  });
-};
+import { request } from '../../utils/request.js';
 
 /**
  * 获取所有研究方向 (已根据文档修正)

@@ -99,14 +99,15 @@ onPullDownRefresh(() => {
   refreshData()
 })
 
-// 导航跳转
+// 导航跳转（底部Tab之间用reLaunch清空页面栈，避免堆积）
 const navigateTo = (url) => {
-  uni.navigateTo({
+  uni.reLaunch({
     url: url
   })
 }
 
 // 通用的API响应处理函数
+// request.js 已返回 res.data（即 {code, data, message}），不再有 statusCode
 const handleApiResponse = (response, dataType) => {
   console.log(`${dataType} API原始返回:`, response);
   
@@ -114,22 +115,12 @@ const handleApiResponse = (response, dataType) => {
     throw new Error('API响应为空');
   }
   
-  // 检查HTTP状态
-  if (response.statusCode !== 200) {
-    throw new Error(`HTTP状态错误: ${response.statusCode}`);
-  }
-  
-  // 检查响应数据结构
-  if (!response.data) {
-    throw new Error('响应数据为空');
-  }
-  
   // 检查业务状态码
-  if (response.data.code !== 200) {
-    throw new Error(`业务错误: ${response.data.message || '未知错误'}`);
+  if (response.code !== 200) {
+    throw new Error(`业务错误: ${response.message || '未知错误'}`);
   }
   
-  return response.data.data;
+  return response.data;
 }
 
 // 检查登录状态
@@ -206,7 +197,23 @@ const fetchHistoryData = async () => {
       list = [];
     }
     
-    historyList.value = list;
+    // 将后端字段映射为模板所需字段
+    historyList.value = list.map(item => {
+      const start = item.startTime ? new Date(item.startTime) : null
+      const end = item.endTime ? new Date(item.endTime) : null
+      const pad = n => String(n).padStart(2, '0')
+      return {
+        ...item,
+        academicYear: item.reviewYear || '',
+        date: start ? `${start.getFullYear()}-${pad(start.getMonth()+1)}-${pad(start.getDate())}` : '',
+        timeSlot: (start && end)
+          ? `${pad(start.getHours())}:${pad(start.getMinutes())} - ${pad(end.getHours())}:${pad(end.getMinutes())}`
+          : '',
+        room: item.location || '',
+        assessor1: (item.assessors && item.assessors[0]) || '',
+        assessor2: (item.assessors && item.assessors[1]) || ''
+      }
+    })
     console.log('更新后的historyList:', historyList.value);
     
   } catch (error) {

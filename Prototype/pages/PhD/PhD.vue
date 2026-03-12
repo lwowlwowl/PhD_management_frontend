@@ -170,7 +170,7 @@
 
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app';
 import {
   fetchStudentInfo,
@@ -230,10 +230,10 @@ const switchTab = (tab) => {
     case 'PhD':
       break
     case 'history':
-      uni.navigateTo({ url: '/pages/PhD/history' })
+      uni.reLaunch({ url: '/pages/PhD/history' })
       break
     case 'profile':
-      uni.navigateTo({ url: '/pages/PhD/profile' })
+      uni.reLaunch({ url: '/pages/PhD/profile' })
       break
   }
 }
@@ -257,6 +257,7 @@ const viewNoticeDetail = (notice) => {
 }
 
 // 通用的API响应处理函数
+// request.js 已返回 res.data（即 {code, data, message}），不再有 statusCode
 const handleApiResponse = (response, dataType) => {
   console.log(`${dataType} API原始返回:`, response);
   
@@ -264,22 +265,12 @@ const handleApiResponse = (response, dataType) => {
     throw new Error('API响应为空');
   }
   
-  // 检查HTTP状态
-  if (response.statusCode !== 200) {
-    throw new Error(`HTTP状态错误: ${response.statusCode}`);
-  }
-  
-  // 检查响应数据结构
-  if (!response.data) {
-    throw new Error('响应数据为空');
-  }
-  
   // 检查业务状态码
-  if (response.data.code !== 200) {
-    throw new Error(`业务错误: ${response.data.message || '未知错误'}`);
+  if (response.code !== 200) {
+    throw new Error(`业务错误: ${response.message || '未知错误'}`);
   }
   
-  return response.data.data;
+  return response.data;
 }
 
 // 初始化数据
@@ -333,15 +324,41 @@ const loadCurrentReview = async () => {
   try {
     const response = await fetchCurrentReview();
     const data = handleApiResponse(response, '年审状态');
-    
     console.log('2.2 年审状态API成功，解析后的data:', data);
     
     if (data) {
+      // 后端没有 scheduled 字段，用 status === 'scheduled' 推导
+      const isScheduled = data.scheduled !== undefined
+        ? !!data.scheduled
+        : data.status === 'scheduled'
+
+      // 后端用 startTime/endTime ISO 字符串，前端需要分别格式化成日期和时间
+      let dateStr = data.date || ''
+      let timeStr = data.time || ''
+      if (!dateStr && data.startTime) {
+        const d = new Date(data.startTime)
+        dateStr = `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
+      }
+      if (!timeStr && data.startTime) {
+        const d = new Date(data.startTime)
+        const h = d.getHours().toString().padStart(2, '0')
+        const m = d.getMinutes().toString().padStart(2, '0')
+        // 如果有 endTime 一并显示时间段
+        if (data.endTime) {
+          const e = new Date(data.endTime)
+          const eh = e.getHours().toString().padStart(2, '0')
+          const em = e.getMinutes().toString().padStart(2, '0')
+          timeStr = `${h}:${m} - ${eh}:${em}`
+        } else {
+          timeStr = `${h}:${m}`
+        }
+      }
+
       currentReview.value = {
         status: data.status || 'pending',
-        scheduled: data.scheduled || false,
-        date: data.date || '',
-        time: data.time || '',
+        scheduled: isScheduled,
+        date: dateStr,
+        time: timeStr,
         location: data.location || '',
         assessors: data.assessors || []
       };
@@ -485,18 +502,24 @@ const checkLoginStatus = () => {
   return true;
 }
 
+const isInitializing = ref(false)
+
 onShow(() => {
-  console.log('页面挂载完毕 (onShow)，开始初始化所有数据...');
-  
-  // 检查登录状态
+  if (isInitializing.value) return  // 防止重复触发
+  isInitializing.value = true
+
   if (!checkLoginStatus()) {
-    return;
+    isInitializing.value = false
+    return
   }
-  
-  // 加载数据
-  loadStudentInfo();
-  loadCurrentReview();
-  loadNotices();
+
+  Promise.all([
+    loadStudentInfo(),
+    loadCurrentReview(),
+    loadNotices()
+  ]).finally(() => {
+    isInitializing.value = false
+  })
 })
 </script>
 

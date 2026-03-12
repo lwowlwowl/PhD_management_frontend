@@ -87,9 +87,9 @@ const canConfirm = computed(() => {
 const loadResearchDirections = async () => {
   try {
     const res = await fetchResearchDirections()
-    if (res && res.statusCode === 200 && res.data && res.data.code === 200) {
-      researchDirections.value = res.data.data
-      const selectedArea = res.data.data.find(area => area.selected)
+    if (res && res.code === 200) {
+      researchDirections.value = res.data
+      const selectedArea = res.data.find(area => area.selected)
       if (selectedArea) {
         currentResearch.value = {
           direction: selectedArea.skillName,
@@ -97,7 +97,7 @@ const loadResearchDirections = async () => {
         }
       }
     } else {
-      const errorMsg = (res && res.data && res.data.message) || '获取研究方向失败'
+      const errorMsg = (res && res.message) || '获取研究方向失败'
       uni.showToast({ title: errorMsg, icon: 'none' })
     }
   } catch (e) {
@@ -109,8 +109,8 @@ const loadResearchDirections = async () => {
 const loadStudentInfo = async () => {
   try {
     const res = await fetchStudentInfo()
-    if (res && res.statusCode === 200 && res.data && res.data.code === 200) {
-      const researchArea = res.data.data.researchArea
+    if (res && res.code === 200) {
+      const researchArea = res.data.researchArea
       if (researchArea) {
         if (!currentResearch.value.directionId) {
           currentResearch.value = {
@@ -120,7 +120,7 @@ const loadStudentInfo = async () => {
         }
       }
     } else {
-      const errorMsg = (res && res.data && res.data.message) || '获取学生信息失败'
+      const errorMsg = (res && res.message) || '获取学生信息失败'
       uni.showToast({ title: errorMsg, icon: 'none' })
     }
   } catch (e) {
@@ -165,7 +165,7 @@ const saveChanges = async () => {
     const res = await updateResearchArea(editData.value.directionId)
     uni.hideLoading()
     
-    if (res && res.statusCode === 200 && res.data && res.data.code === 200) {
+    if (res && res.code === 200) {
       currentResearch.value.direction = editData.value.direction
       currentResearch.value.directionId = editData.value.directionId
       
@@ -176,7 +176,7 @@ const saveChanges = async () => {
       isEditing.value = false
       uni.showToast({ title: '保存成功', icon: 'success' })
     } else {
-      const errorMsg = (res && res.data && res.data.message) || '保存失败'
+      const errorMsg = (res && res.message) || '保存失败'
       uni.showToast({ title: errorMsg, icon: 'none' })
     }
   } catch (e) {
@@ -203,7 +203,7 @@ const confirmAndContinue = async () => {
     
     uni.showToast({ title: '确认成功', icon: 'success', duration: 1500 })
     setTimeout(() => {
-      uni.navigateTo({ url: '/pages/PhD/PhD' })
+      uni.reLaunch({ url: '/pages/PhD/PhD' })
     }, 1500)
     
   } catch (e) {
